@@ -9,8 +9,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,7 +43,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentActivity
 import com.yalantis.ucrop.UCrop
@@ -84,66 +88,36 @@ class CustomToolsDialogFragment : DialogFragment() {
         }
 
     companion object {
-
         private const val ARG_IMAGE_PATH = "image_path"
         private const val ARG_IMAGE_PATHS = "image_paths"
         private const val TAG = "CustomToolsDialog"
 
-        fun show(
-            activity: FragmentActivity,
-            imagePaths: List<String>
-        ) {
-            if (
-                activity.isFinishing ||
-                activity.isDestroyed
-            ) {
-                return
-            }
-
+        fun show(activity: FragmentActivity, imagePaths: List<String>) {
+            if (activity.isFinishing || activity.isDestroyed) return
             val manager = activity.supportFragmentManager
-
-            if (
-                manager.isStateSaved ||
-                manager.findFragmentByTag(TAG) != null
-            ) {
-                return
-            }
+            if (manager.isStateSaved || manager.findFragmentByTag(TAG) != null) return
 
             CustomToolsDialogFragment().apply {
                 arguments = Bundle().apply {
-                    putStringArrayList(
-                        ARG_IMAGE_PATHS,
-                        ArrayList(imagePaths)
-                    )
+                    putStringArrayList(ARG_IMAGE_PATHS, ArrayList(imagePaths))
                     if (imagePaths.isNotEmpty()) {
-                        putString(
-                            ARG_IMAGE_PATH,
-                            imagePaths.first()
-                        )
+                        putString(ARG_IMAGE_PATH, imagePaths.first())
                     }
                 }
             }.show(manager, TAG)
         }
 
-        fun show(
-            activity: FragmentActivity,
-            imagePath: String
-        ) {
+        fun show(activity: FragmentActivity, imagePath: String) {
             show(activity, listOf(imagePath))
         }
     }
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         imagePaths = arguments?.getStringArrayList(ARG_IMAGE_PATHS) ?: arrayListOf()
         if (imagePaths.isEmpty()) {
             val single = arguments?.getString(ARG_IMAGE_PATH).orEmpty()
-            if (single.isNotEmpty()) {
-                imagePaths.add(single)
-            }
+            if (single.isNotEmpty()) imagePaths.add(single)
         }
         imagePath = imagePaths.firstOrNull().orEmpty()
     }
@@ -153,21 +127,12 @@ class CustomToolsDialogFragment : DialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-
         return ComposeView(requireContext()).apply {
-
             setContent {
-
                 MaterialTheme {
-
                     CustomToolsContent(
-                        onDismiss = {
-                            dismiss()
-                        },
-
-                        onToolClick = { toolId ->
-                            handleToolClick(toolId)
-                        }
+                        onDismiss = { dismiss() },
+                        onToolClick = { toolId -> handleToolClick(toolId) }
                     )
                 }
             }
@@ -176,23 +141,11 @@ class CustomToolsDialogFragment : DialogFragment() {
 
     override fun onStart() {
         super.onStart()
-
         dialog?.window?.let { window ->
-
-            window.setBackgroundDrawableResource(
-                android.R.color.transparent
-            )
-
-            window.addFlags(
-                android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND
-            )
-
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             window.setDimAmount(0.55f)
-
-            window.setGravity(
-                Gravity.BOTTOM
-            )
-
+            window.setGravity(Gravity.BOTTOM)
             window.setLayout(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -201,157 +154,111 @@ class CustomToolsDialogFragment : DialogFragment() {
     }
 
     private fun handleToolClick(toolId: ToolId) {
-        if (imagePath.isBlank()) {
-            return
-        }
+        if (imagePath.isBlank()) return
 
         when (toolId) {
             ToolId.ID_CARD -> {
                 dismiss()
                 val intent = Intent(requireContext(), IdCardActivity::class.java).apply {
-                    putStringArrayListExtra(
-                        IdCardActivity.EXTRA_IMAGE_PATHS,
-                        ArrayList(imagePaths)
-                    )
+                    putStringArrayListExtra(IdCardActivity.EXTRA_IMAGE_PATHS, ArrayList(imagePaths))
                 }
                 requireContext().startActivity(intent)
             }
-
             ToolId.PASSPORT_PHOTO -> {
                 dismiss()
                 val intent = Intent(requireContext(), PassportA4SheetActivity::class.java).apply {
-                    putStringArrayListExtra(
-                        PassportA4SheetActivity.EXTRA_IMAGE_PATHS,
-                        ArrayList(imagePaths)
-                    )
+                    putStringArrayListExtra(PassportA4SheetActivity.EXTRA_IMAGE_PATHS, ArrayList(imagePaths))
                 }
                 requireContext().startActivity(intent)
             }
-
             ToolId.JUGANUA -> {
-                val success = JuganuaHelper.open(
-                    requireContext(),
-                    imagePath
-                )
-                if (success) {
-                    dismiss()
-                }
+                if (JuganuaHelper.open(requireContext(), imagePath)) dismiss()
             }
-
             ToolId.COMPRESS_IMAGE -> {
                 dismiss()
-                ImageCompressionDialog.show(
-                    requireContext(),
-                    imagePath
-                )
+                ImageCompressionDialog.show(requireContext(), imagePath)
             }
-
             ToolId.CROP_IMAGE -> {
                 val sourceUri = Uri.fromFile(File(imagePath))
                 val destinationUri = Uri.fromFile(
-                    File(
-                        requireContext().cacheDir,
-                        "crop_${System.currentTimeMillis()}.png"
-                    )
+                    File(requireContext().cacheDir, "crop_${System.currentTimeMillis()}.png")
                 )
-
                 val uCropIntent = UCrop.of(sourceUri, destinationUri)
-                    .withOptions(UCrop.Options().apply {
-                        setFreeStyleCropEnabled(true)
-                    })
+                    .withOptions(UCrop.Options().apply { setFreeStyleCropEnabled(true) })
                     .getIntent(requireContext())
-
                 cropImageLauncher.launch(uCropIntent)
             }
-
             ToolId.CONVERT_PDF -> {
-                val result = CustomToolRunner.convertPdf(
-                    requireContext(),
-                    imagePath
-                )
+                val result = CustomToolRunner.convertPdf(requireContext(), imagePath)
                 if (result.success && result.outputPath != null) {
                     dismiss()
-                    ResultDialog.show(
-                        requireContext(),
-                        result.outputPath,
-                        "PDF"
-                    )
+                    ResultDialog.show(requireContext(), result.outputPath, "PDF")
                 }
             }
-
             ToolId.PDF_UNLOCKER -> {
                 dismiss()
-                val uri = Uri.fromFile(java.io.File(imagePath))
-                org.fossify.filemanager.customtools.pdfunlocker.PdfUnlockerDialog.show(
-                    requireContext(),
-                    uri
-                )
+                val uri = Uri.fromFile(File(imagePath))
+                org.fossify.filemanager.customtools.pdfunlocker.PdfUnlockerDialog.show(requireContext(), uri)
             }
-
             ToolId.WHATSAPP -> {
-                val success = WhatsAppHelper.share(
-                    requireContext(),
-                    imagePath
-                )
-                if (success) {
-                    dismiss()
-                }
+                if (WhatsAppHelper.share(requireContext(), imagePath)) dismiss()
             }
-
             ToolId.NOKOPRINT -> {
-                val success = NokoPrintHelper.print(
-                    requireContext(),
-                    imagePath
-                )
-                if (success) {
-                    dismiss()
-                }
+                if (NokoPrintHelper.print(requireContext(), imagePath)) dismiss()
             }
         }
     }
 }
 
 object CustomToolsSheet {
-
-    fun show(
-        context: android.content.Context,
-        imagePaths: List<String>
-    ) {
+    fun show(context: android.content.Context, imagePaths: List<String>) {
         val activity = context as? FragmentActivity ?: return
         CustomToolsDialogFragment.show(activity, imagePaths)
     }
 
-    fun show(
-        context: android.content.Context,
-        imagePath: String
-    ) {
+    fun show(context: android.content.Context, imagePath: String) {
         show(context, listOf(imagePath))
     }
 }
+
+data class UnifiedTool(
+    val id: ToolId,
+    val title: String,
+    val subtitle: String,
+    val iconRes: Int,
+    val iconTint: Color,
+    val containerColor: Color
+)
 
 @Composable
 private fun CustomToolsContent(
     onDismiss: () -> Unit,
     onToolClick: (ToolId) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val allTools = listOf(
+        UnifiedTool(ToolId.WHATSAPP, "WhatsApp", "Share directly via WhatsApp", R.drawable.ic_tool_whatsapp, Color(0xFF25D366), Color(0xFF25D366).copy(alpha = 0.12f)),
+        UnifiedTool(ToolId.NOKOPRINT, "NokoPrint", "Print documents or photos", R.drawable.ic_tool_print, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+        UnifiedTool(ToolId.CROP_IMAGE, "Crop Image", "Adjust image boundaries", R.drawable.ic_tool_crop, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+        UnifiedTool(ToolId.ID_CARD, "ID Card", "85.6 × 54 mm layout on A4", R.drawable.ic_tool_id_card, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
+        UnifiedTool(ToolId.PASSPORT_PHOTO, "Passport Photo", "30 × 40 mm • 36 slots (A4)", R.drawable.ic_tool_passport, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
+        UnifiedTool(ToolId.JUGANUA, "Juganua", "Open image inside Juganua", R.drawable.ic_tool_juganua, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
+        UnifiedTool(ToolId.COMPRESS_IMAGE, "Compress", "Reduce file size efficiently", R.drawable.ic_tool_compress, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
+        UnifiedTool(ToolId.CONVERT_PDF, "To PDF", "Convert image to PDF document", R.drawable.ic_tool_pdf, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
+        UnifiedTool(ToolId.PDF_UNLOCKER, "Unlocker", "Remove PDF password / Brute-force", R.drawable.ic_tool_pdf, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer)
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(
-            topStart = 28.dp,
-            topEnd = 28.dp
-        ),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         tonalElevation = 8.dp,
         shadowElevation = 12.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 4.dp,
-                    bottom = 20.dp
-                )
+                .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -370,10 +277,7 @@ private fun CustomToolsContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        top = 2.dp,
-                        bottom = 12.dp
-                    ),
+                    .padding(top = 2.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -383,7 +287,7 @@ private fun CustomToolsContent(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Choose an action",
+                        text = "Long press any tool for info",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -400,54 +304,21 @@ private fun CustomToolsContent(
                 )
             }
 
-            // Quick Actions: WhatsApp (green), NokoPrint, and Crop Image
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 14.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // WhatsApp (Tinted Green)
-                QuickActionIcon(
-                    iconRes = R.drawable.ic_tool_whatsapp,
-                    contentDescription = "WhatsApp",
-                    iconTint = Color(0xFF25D366),
-                    containerColor = Color(0xFF25D366).copy(alpha = 0.12f),
-                    onClick = { onToolClick(ToolId.WHATSAPP) }
-                )
-
-                // NokoPrint
-                QuickActionIcon(
-                    iconRes = R.drawable.ic_tool_print,
-                    contentDescription = "NokoPrint",
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                    onClick = { onToolClick(ToolId.NOKOPRINT) }
-                )
-
-                // Crop Image
-                QuickActionIcon(
-                    iconRes = R.drawable.ic_tool_crop,
-                    contentDescription = "Crop Image",
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                    onClick = { onToolClick(ToolId.CROP_IMAGE) }
-                )
-            }
-
-            // Remaining standard cards in 2 columns
+            // Grid of circular tool buttons with names below
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Fixed(4),
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
                 userScrollEnabled = false
             ) {
-                items(gridTools) { item ->
-                    ToolCard(
-                        item = item,
-                        onClick = { onToolClick(item.id) }
+                items(allTools) { tool ->
+                    CircularToolButtonWithLabel(
+                        tool = tool,
+                        onClick = { onToolClick(tool.id) },
+                        onLongClick = {
+                            Toast.makeText(context, "${tool.title}: ${tool.subtitle}", Toast.LENGTH_LONG).show()
+                        }
                     )
                 }
             }
@@ -455,131 +326,52 @@ private fun CustomToolsContent(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun QuickActionIcon(
-    iconRes: Int,
-    contentDescription: String,
-    iconTint: Color,
-    containerColor: Color,
-    onClick: () -> Unit
+private fun CircularToolButtonWithLabel(
+    tool: UnifiedTool,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .size(54.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        shape = CircleShape,
-        color = containerColor,
-        tonalElevation = 2.dp
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = contentDescription,
-                tint = iconTint,
-                modifier = Modifier.size(26.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ToolCard(
-    item: CustomToolsItem,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp,
-        shadowElevation = 1.dp
-    ) {
-        Row(
+        Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 11.dp
+                .size(56.dp)
+                .clip(CircleShape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
                 ),
-            verticalAlignment = Alignment.CenterVertically
+            shape = CircleShape,
+            color = tool.containerColor,
+            tonalElevation = 2.dp
         ) {
             Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        MaterialTheme.colorScheme.secondaryContainer
-                    ),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painter = painterResource(item.iconRes),
-                    contentDescription = item.title,
-                    modifier = Modifier.size(23.dp),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.size(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = item.subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
+                    painter = painterResource(tool.iconRes),
+                    contentDescription = tool.title,
+                    tint = tool.iconTint,
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = tool.title,
+            style = MaterialTheme.typography.labelMedium,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            textAlign = TextAlign.Center
+        )
     }
 }
-
-private val gridTools = listOf(
-    CustomToolsItem(
-        ToolId.ID_CARD,
-        "ID Card",
-        "85.6 × 54 mm on A4",
-        R.drawable.ic_tool_id_card
-    ),
-    CustomToolsItem(
-        ToolId.PASSPORT_PHOTO,
-        "Passport Photo",
-        "30 × 40 mm • 36 slots (A4)",
-        R.drawable.ic_tool_passport
-    ),
-    CustomToolsItem(
-        ToolId.JUGANUA,
-        "Open in Juganua",
-        "Open image in Juganua",
-        R.drawable.ic_tool_juganua
-    ),
-    CustomToolsItem(
-        ToolId.COMPRESS_IMAGE,
-        "Compress Image",
-        "Reduce image file size",
-        R.drawable.ic_tool_compress
-    ),
-    CustomToolsItem(
-        ToolId.CONVERT_PDF,
-        "Convert to PDF",
-        "Create PDF",
-        R.drawable.ic_tool_pdf
-    ),
-    CustomToolsItem(
-        ToolId.PDF_UNLOCKER,
-        "PDF Unlocker",
-        "Remove password or brute-force",
-        R.drawable.ic_tool_pdf
-    )
-)
