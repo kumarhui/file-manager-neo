@@ -1,4 +1,4 @@
-package org.fossify.filemanager.customtools.idcard
+﻿package org.fossify.filemanager.customtools.idcard
 
 import android.app.Activity
 import android.content.ContentValues
@@ -78,6 +78,7 @@ import com.yalantis.ucrop.UCrop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.fossify.filemanager.R
 import org.fossify.filemanager.customtools.layout.IdCardLayoutEngine
 import org.fossify.filemanager.customtools.passport.PassportPhotoProcessor
 import java.io.File
@@ -130,6 +131,7 @@ fun IdCardScreen(
     var pages by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
     var currentPageIndex by remember { mutableIntStateOf(0) }
     var isGenerating by remember { mutableStateOf(false) }
+    var isVerticalLayout by remember { mutableStateOf(true) }
 
     LaunchedEffect(imagePaths) {
         val loaded = imagePaths.mapNotNull { path ->
@@ -180,11 +182,11 @@ fun IdCardScreen(
         }
     }
 
-    LaunchedEffect(bitmaps) {
+    LaunchedEffect(bitmaps, isVerticalLayout) {
         if (bitmaps.isEmpty()) return@LaunchedEffect
         isGenerating = true
         withContext(Dispatchers.Default) {
-            pages = IdCardLayoutEngine.createMultiPageSheets(bitmaps)
+            pages = IdCardLayoutEngine.createMultiPageSheets(bitmaps, isVerticalLayout)
             if (currentPageIndex >= pages.size) {
                 currentPageIndex = (pages.size - 1).coerceAtLeast(0)
             }
@@ -269,9 +271,22 @@ fun IdCardScreen(
                     if (selectedIndex in imagePaths.indices) {
                         val src = Uri.fromFile(File(imagePaths[selectedIndex]))
                         val dest = Uri.fromFile(File(context.cacheDir, "id_crop_${System.currentTimeMillis()}.png"))
+
+                        val options = UCrop.Options().apply {
+                            withAspectRatio(85.6f, 53.98f)
+                            setHideBottomControls(false)
+                            setFreeStyleCropEnabled(false)
+                            setCompressionQuality(90)
+                            // Fix status bar overlap coloring
+                            setStatusBarColor(android.graphics.Color.parseColor("#1F1F1F"))
+                            setToolbarColor(android.graphics.Color.parseColor("#1F1F1F"))
+                            setToolbarWidgetColor(android.graphics.Color.WHITE)
+                        }
+
                         val intent = UCrop.of(src, dest)
-                            .withAspectRatio(85.6f, 53.98f)
+                            .withOptions(options)
                             .getIntent(context)
+
                         cropLauncher.launch(intent)
                     }
                 },
@@ -296,24 +311,79 @@ fun IdCardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Page ${if (pages.isEmpty()) 0 else currentPageIndex + 1} of ${pages.size}",
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column {
+                            Text(
+                                text = "Page ${if (pages.isEmpty()) 0 else currentPageIndex + 1} of ${pages.size}",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isVerticalLayout) "Layout: Top-Bottom" else "Layout: Left-Right",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                        if (pages.size > 1) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilledTonalButton(
-                                    onClick = { if (currentPageIndex > 0) currentPageIndex-- },
-                                    enabled = currentPageIndex > 0
-                                ) {
-                                    Text("Prev")
-                                }
-                                FilledTonalButton(
-                                    onClick = { if (currentPageIndex < pages.size - 1) currentPageIndex++ },
-                                    enabled = currentPageIndex < pages.size - 1
-                                ) {
-                                    Text("Next")
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // Layout Switch Icon (Toggles Vertical / Horizontal)
+                            IconButton(
+                                onClick = {
+                                    isVerticalLayout = !isVerticalLayout
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_tool_a4),
+                                    contentDescription = "Switch Layout Style",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Swap Individual Card Icon (Interchanges selected image with its pair)
+                            IconButton(
+                                onClick = {
+                                    if (bitmaps.size >= 2 && selectedIndex >= 0) {
+                                        val mutableBitmaps = bitmaps.toMutableList()
+                                        val targetIndex = if (selectedIndex % 2 == 0) {
+                                            (selectedIndex + 1).coerceAtMost(mutableBitmaps.size - 1)
+                                        } else {
+                                            (selectedIndex - 1).coerceAtLeast(0)
+                                        }
+                                        if (targetIndex != selectedIndex) {
+                                            val temp = mutableBitmaps[selectedIndex]
+                                            mutableBitmaps[selectedIndex] = mutableBitmaps[targetIndex]
+                                            mutableBitmaps[targetIndex] = temp
+                                            bitmaps = mutableBitmaps
+                                            selectedIndex = targetIndex
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_tool_crop),
+                                    contentDescription = "Swap Individual Card Position",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            if (pages.size > 1) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FilledTonalButton(
+                                        onClick = { if (currentPageIndex > 0) currentPageIndex-- },
+                                        enabled = currentPageIndex > 0,
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text("Prev", fontSize = 11.sp)
+                                    }
+                                    FilledTonalButton(
+                                        onClick = { if (currentPageIndex < pages.size - 1) currentPageIndex++ },
+                                        enabled = currentPageIndex < pages.size - 1,
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text("Next", fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }
@@ -379,7 +449,6 @@ fun IdCardScreen(
                                         putExtra(Intent.EXTRA_STREAM, uri)
                                         setPackage("com.noco.print")
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        // Ensures NokoPrint gets its own Recents app card
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
                                     }
                                     try {

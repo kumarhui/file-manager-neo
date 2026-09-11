@@ -1,4 +1,4 @@
-package org.fossify.filemanager.customtools.layout
+﻿package org.fossify.filemanager.customtools.layout
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -13,13 +13,12 @@ object IdCardLayoutEngine {
     const val CARD_HEIGHT_MM = 53.98f
 
     /**
-     * Creates an A4 sheet containing up to 2 ID card images (front & back).
-     * front: Placed in the upper half.
-     * back: Placed in the lower half (if provided).
+     * Creates an A4 sheet containing up to 2 ID card images anchored at the top.
      */
     fun createA4Sheet(
         front: Bitmap,
-        back: Bitmap? = null
+        back: Bitmap? = null,
+        isVertical: Boolean = true
     ): Bitmap {
         val pageWidth = A4Page.WIDTH_PX
         val pageHeight = A4Page.HEIGHT_PX
@@ -43,39 +42,52 @@ object IdCardLayoutEngine {
             color = Color.LTGRAY
         }
 
-        val centerX = (pageWidth - cardWidth) / 2f
+        val topMargin = A4Page.mmToPx(20f) // Clean top offset from edge of A4 page
 
         if (back == null) {
-            // Single card centered vertically
-            val centerY = (pageHeight - cardHeight) / 2f
-            val dest = RectF(centerX, centerY, centerX + cardWidth, centerY + cardHeight)
+            val centerX = (pageWidth - cardWidth) / 2f
+            val dest = RectF(centerX, topMargin, centerX + cardWidth, topMargin + cardHeight)
             canvas.drawBitmap(front, null, dest, paint)
             canvas.drawRect(dest, strokePaint)
         } else {
-            // Front in upper section
-            val topCardY = (pageHeight * 0.28f) - (cardHeight / 2f)
-            val frontDest = RectF(centerX, topCardY, centerX + cardWidth, topCardY + cardHeight)
-            canvas.drawBitmap(front, null, frontDest, paint)
-            canvas.drawRect(frontDest, strokePaint)
+            val gapPx = A4Page.mmToPx(10f) // Tighter gap between cards
 
-            // Back in lower section
-            val bottomCardY = (pageHeight * 0.72f) - (cardHeight / 2f)
-            val backDest = RectF(centerX, bottomCardY, centerX + cardWidth, bottomCardY + cardHeight)
-            canvas.drawBitmap(back, null, backDest, paint)
-            canvas.drawRect(backDest, strokePaint)
+            if (isVertical) {
+                // Vertical Stack: Anchored at the top
+                val centerX = (pageWidth - cardWidth) / 2f
+
+                val frontDest = RectF(centerX, topMargin, centerX + cardWidth, topMargin + cardHeight)
+                canvas.drawBitmap(front, null, frontDest, paint)
+                canvas.drawRect(frontDest, strokePaint)
+
+                val backY = topMargin + cardHeight + gapPx
+                val backDest = RectF(centerX, backY, centerX + cardWidth, backY + cardHeight)
+                canvas.drawBitmap(back, null, backDest, paint)
+                canvas.drawRect(backDest, strokePaint)
+            } else {
+                // Horizontal Stack: Left and Right side-by-side anchored at the top
+                val totalWidth = (cardWidth * 2) + gapPx
+                val startX = (pageWidth - totalWidth) / 2f
+
+                val frontDest = RectF(startX, topMargin, startX + cardWidth, topMargin + cardHeight)
+                canvas.drawBitmap(front, null, frontDest, paint)
+                canvas.drawRect(frontDest, strokePaint)
+
+                val backX = startX + cardWidth + gapPx
+                val backDest = RectF(backX, topMargin, backX + cardWidth, topMargin + cardHeight)
+                canvas.drawBitmap(back, null, backDest, paint)
+                canvas.drawRect(backDest, strokePaint)
+            }
         }
 
         return result
     }
 
-    /**
-     * Splits any list of images into pairs of 2 and generates an A4 sheet for each pair.
-     */
-    fun createMultiPageSheets(images: List<Bitmap>): List<Bitmap> {
+    fun createMultiPageSheets(images: List<Bitmap>, isVertical: Boolean = true): List<Bitmap> {
         return images.chunked(2).map { pair ->
             val front = pair[0]
             val back = pair.getOrNull(1)
-            createA4Sheet(front, back)
+            createA4Sheet(front, back, isVertical)
         }
     }
 }

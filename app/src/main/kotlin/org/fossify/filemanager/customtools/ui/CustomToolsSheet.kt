@@ -201,10 +201,41 @@ class CustomToolsDialogFragment : DialogFragment() {
                 org.fossify.filemanager.customtools.pdfunlocker.PdfUnlockerDialog.show(requireContext(), uri)
             }
             ToolId.WHATSAPP -> {
-                if (WhatsAppHelper.share(requireContext(), imagePath)) dismiss()
+                val pathsToShare = if (imagePaths.isNotEmpty()) imagePaths else listOf(imagePath)
+                if (WhatsAppHelper.share(requireContext(), pathsToShare)) {
+                    dismiss()
+                }
             }
             ToolId.NOKOPRINT -> {
-                if (NokoPrintHelper.print(requireContext(), imagePath)) dismiss()
+                val pathsToPrint = if (imagePaths.isNotEmpty()) imagePaths else listOf(imagePath)
+                val hasPdf = pathsToPrint.any { it.endsWith(".pdf", ignoreCase = true) }
+                if (hasPdf) {
+                    val dpiOptions = arrayOf(
+                        "300 DPI (Standard Print)",
+                        "450 DPI (Enhanced Clarity)",
+                        "600 DPI (High Resolution)",
+                        "800 DPI (Fine Detail)",
+                        "1000 DPI (Super High-Res)",
+                        "1200 DPI (Ultra Sharp Max)"
+                    )
+                    val dpiValues = intArrayOf(300, 450, 600, 800, 1000, 1200)
+                    var selectedDpi = 300
+
+                    android.app.AlertDialog.Builder(requireContext())
+                        .setTitle("Select Extraction Quality")
+                        .setSingleChoiceItems(dpiOptions, 0) { _, which ->
+                            selectedDpi = dpiValues[which]
+                        }
+                        .setPositiveButton("Extract & Print") { _, _ ->
+                            dismiss()
+                            NokoPrintHelper.extractPdfToTempAndPrint(requireContext(), pathsToPrint, selectedDpi)
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                } else {
+                    dismiss()
+                    NokoPrintHelper.print(requireContext(), pathsToPrint)
+                }
             }
         }
     }
