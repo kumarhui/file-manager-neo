@@ -11,6 +11,7 @@ data class CustomToolsItem(
 
 enum class ToolId {
     ID_CARD,
+    ID_CARD_SPLITTER,
     PASSPORT_PHOTO,
     JUGANUA,
     COMPRESS_IMAGE,

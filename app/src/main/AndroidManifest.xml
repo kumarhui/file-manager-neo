@@ -29,7 +29,7 @@
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:theme="@style/Theme.UCropSafeDrawing"
             android:windowSoftInputMode="stateAlwaysHidden" />
 
         <activity
@@ -444,6 +444,10 @@
             android:theme="@style/AppTheme" />
         <activity
             android:name=".customtools.passport.PassportA4SheetActivity"
+            android:theme="@style/AppTheme" />
+            <activity
+            android:name="org.fossify.filemanager.customtools.idcardsplitter.IdCardSplitterActivity"
+            android:exported="false"
             android:theme="@style/AppTheme" />
     </application>
 </manifest>

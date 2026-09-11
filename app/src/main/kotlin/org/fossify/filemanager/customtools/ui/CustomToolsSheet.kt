@@ -52,6 +52,7 @@ import com.yalantis.ucrop.UCrop
 import org.fossify.filemanager.R
 import org.fossify.filemanager.customtools.CustomToolRunner
 import org.fossify.filemanager.customtools.idcard.IdCardActivity
+import org.fossify.filemanager.customtools.idcardsplitter.IdCardSplitterActivity
 import org.fossify.filemanager.customtools.passport.PassportA4SheetActivity
 import org.fossify.filemanager.customtools.preview.ResultDialog
 import org.fossify.filemanager.customtools.sharing.JuganuaHelper
@@ -157,6 +158,13 @@ class CustomToolsDialogFragment : DialogFragment() {
         if (imagePath.isBlank()) return
 
         when (toolId) {
+            ToolId.ID_CARD_SPLITTER -> {
+                dismiss()
+                val intent = Intent(requireContext(), IdCardSplitterActivity::class.java).apply {
+                    putStringArrayListExtra(IdCardSplitterActivity.EXTRA_IMAGE_PATHS, ArrayList(imagePaths))
+                }
+                requireContext().startActivity(intent)
+            }
             ToolId.ID_CARD -> {
                 dismiss()
                 val intent = Intent(requireContext(), IdCardActivity::class.java).apply {
@@ -272,6 +280,7 @@ private fun CustomToolsContent(
         UnifiedTool(ToolId.WHATSAPP, "WhatsApp", "Share directly via WhatsApp", R.drawable.ic_tool_whatsapp, Color(0xFF25D366), Color(0xFF25D366).copy(alpha = 0.12f)),
         UnifiedTool(ToolId.NOKOPRINT, "NokoPrint", "Print documents or photos", R.drawable.ic_tool_print, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
         UnifiedTool(ToolId.CROP_IMAGE, "Crop Image", "Adjust image boundaries", R.drawable.ic_tool_crop, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
+        UnifiedTool(ToolId.ID_CARD_SPLITTER, "ID Splitter", "Split & compose A4/A6 slots", R.drawable.ic_tool_crop, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
         UnifiedTool(ToolId.ID_CARD, "ID Card", "85.6 × 54 mm layout on A4", R.drawable.ic_tool_id_card, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
         UnifiedTool(ToolId.PASSPORT_PHOTO, "Passport Photo", "30 × 40 mm • 36 slots (A4)", R.drawable.ic_tool_passport, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
         UnifiedTool(ToolId.JUGANUA, "Juganua", "Open image inside Juganua", R.drawable.ic_tool_juganua, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
