@@ -1,4 +1,4 @@
-package org.fossify.filemanager.customtools.ui
+﻿package org.fossify.filemanager.customtools.ui
 
 import androidx.annotation.DrawableRes
 
@@ -16,6 +16,7 @@ enum class ToolId {
     COMPRESS_IMAGE,
     CROP_IMAGE,
     CONVERT_PDF,
+    PDF_UNLOCKER,
     WHATSAPP,
     NOKOPRINT
 }

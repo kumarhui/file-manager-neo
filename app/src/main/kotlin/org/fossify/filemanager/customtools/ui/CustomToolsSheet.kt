@@ -279,6 +279,15 @@ class CustomToolsDialogFragment : DialogFragment() {
                 }
             }
 
+            ToolId.PDF_UNLOCKER -> {
+                dismiss()
+                val uri = Uri.fromFile(java.io.File(imagePath))
+                org.fossify.filemanager.customtools.pdfunlocker.PdfUnlockerDialog.show(
+                    requireContext(),
+                    uri
+                )
+            }
+
             ToolId.WHATSAPP -> {
                 val success = WhatsAppHelper.share(
                     requireContext(),
@@ -565,6 +574,12 @@ private val gridTools = listOf(
         ToolId.CONVERT_PDF,
         "Convert to PDF",
         "Create PDF",
+        R.drawable.ic_tool_pdf
+    ),
+    CustomToolsItem(
+        ToolId.PDF_UNLOCKER,
+        "PDF Unlocker",
+        "Remove password or brute-force",
         R.drawable.ic_tool_pdf
     )
 )
