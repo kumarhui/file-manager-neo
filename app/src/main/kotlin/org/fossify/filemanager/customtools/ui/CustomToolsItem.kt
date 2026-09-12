@@ -19,5 +19,7 @@ enum class ToolId {
     CONVERT_PDF,
     PDF_UNLOCKER,
     WHATSAPP,
-    NOKOPRINT
+    NOKOPRINT,
+    CUSTOM_RENAME,
+    WORD_SPLIT_RENAME
 }

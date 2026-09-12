@@ -158,6 +158,14 @@ class CustomToolsDialogFragment : DialogFragment() {
         if (imagePath.isBlank()) return
 
         when (toolId) {
+            ToolId.CUSTOM_RENAME -> {
+                dismiss()
+                org.fossify.filemanager.customtools.preview.CustomRenameDialog.show(requireContext(), imagePaths)
+            }
+            ToolId.WORD_SPLIT_RENAME -> {
+                dismiss()
+                org.fossify.filemanager.customtools.preview.WordSplitRenameDialog.show(requireContext(), imagePaths)
+            }
             ToolId.ID_CARD_SPLITTER -> {
                 dismiss()
                 val intent = Intent(requireContext(), IdCardSplitterActivity::class.java).apply {
@@ -277,6 +285,8 @@ private fun CustomToolsContent(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val allTools = listOf(
+        UnifiedTool(ToolId.CUSTOM_RENAME, "Paste Rename", "Rename from clipboard", R.drawable.ic_tool_crop, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
+        UnifiedTool(ToolId.WORD_SPLIT_RENAME, "Word Split", "Tokenized word rename", R.drawable.ic_tool_crop, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondaryContainer),
         UnifiedTool(ToolId.WHATSAPP, "WhatsApp", "Share directly via WhatsApp", R.drawable.ic_tool_whatsapp, Color(0xFF25D366), Color(0xFF25D366).copy(alpha = 0.12f)),
         UnifiedTool(ToolId.NOKOPRINT, "NokoPrint", "Print documents or photos", R.drawable.ic_tool_print, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
         UnifiedTool(ToolId.CROP_IMAGE, "Crop Image", "Adjust image boundaries", R.drawable.ic_tool_crop, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
