@@ -162,7 +162,7 @@ class CustomToolsDialogFragment : DialogFragment() {
             ToolId.NOKOPRINT -> {
                 val pathsToPrint = if (imagePaths.isNotEmpty()) imagePaths else listOf(imagePath)
                 dismiss()
-                NokoPrintHelper.print(requireContext(), pathsToPrint)
+                NokoPrintHelper.handlePrintWorkflow(requireContext(), pathsToPrint)
             }
 
             ToolId.WHATSAPP -> {
