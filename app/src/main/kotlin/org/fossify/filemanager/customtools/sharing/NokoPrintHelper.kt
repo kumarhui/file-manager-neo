@@ -40,15 +40,23 @@ object NokoPrintHelper {
 
             if (uris.isEmpty()) return false
 
+            val hasPdf = imagePaths.any { it.endsWith(".pdf", ignoreCase = true) }
+            val hasImage = imagePaths.any { !it.endsWith(".pdf", ignoreCase = true) }
+            val mimeType = when {
+                hasPdf && !hasImage -> "application/pdf"
+                !hasPdf && hasImage -> "image/*"
+                else -> "*/*"
+            }
+
             val intent = if (uris.size == 1) {
                 Intent(Intent.ACTION_SEND).apply {
-                    type = "image/*"
+                    type = mimeType
                     putExtra(Intent.EXTRA_STREAM, uris[0])
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
             } else {
                 Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = "image/*"
+                    type = mimeType
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
