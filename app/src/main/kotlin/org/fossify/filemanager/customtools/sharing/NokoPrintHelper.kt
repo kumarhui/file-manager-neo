@@ -188,4 +188,26 @@ object NokoPrintHelper {
             null
         }
     }
+
+    fun printUri(context: Context, uri: Uri, mimeType: String = "application/pdf"): Boolean {
+        try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            intent.setPackage("com.nokoprint")
+            try {
+                context.startActivity(intent)
+                return true
+            } catch (_: Exception) {
+                intent.setPackage("com.noco.print")
+                context.startActivity(intent)
+                return true
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "NokoPrint not installed or failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            return false
+        }
+    }
 }

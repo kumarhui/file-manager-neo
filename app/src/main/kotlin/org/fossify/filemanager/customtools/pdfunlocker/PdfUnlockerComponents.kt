@@ -1,4 +1,4 @@
-package org.fossify.filemanager.customtools.pdfunlocker
+﻿package org.fossify.filemanager.customtools.pdfunlocker
 
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -23,10 +23,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
 
 @Composable
 fun PdfActionCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
@@ -73,12 +71,18 @@ fun SuccessDashboard(
     unlockedUri: Uri,
     onPreview: () -> Unit,
     onDownload: () -> Unit,
+    onPrint: () -> Unit,
     onNavigateToTool: (String, Uri) -> Unit
 ) {
     var showContext by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(32.dp), color = Color(0xFF4CAF50).copy(0.1f), border = BorderStroke(2.dp, Color(0xFF4CAF50))) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(32.dp),
+            color = Color(0xFF4CAF50).copy(0.1f),
+            border = BorderStroke(2.dp, Color(0xFF4CAF50))
+        ) {
             Box {
                 Column(Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(64.dp))
@@ -95,7 +99,11 @@ fun SuccessDashboard(
             }
         }
 
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(12.dp))
@@ -107,9 +115,49 @@ fun SuccessDashboard(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onPreview, modifier = Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)) { Text("VIEW") }
-            Button(onClick = onDownload, modifier = Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(16.dp)) { Text("SAVE") }
+        // Icon-only action bar: Preview, Save, and Print
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalIconButton(
+                onClick = onPreview,
+                modifier = Modifier.size(54.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Visibility,
+                    contentDescription = "View PDF",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            FilledTonalIconButton(
+                onClick = onDownload,
+                modifier = Modifier.size(54.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SaveAlt,
+                    contentDescription = "Save to Downloads",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            FilledIconButton(
+                onClick = onPrint,
+                modifier = Modifier.size(54.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Print,
+                    contentDescription = "Print PDF",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     }
 }
@@ -124,5 +172,3 @@ fun PdfModeTab(text: String, isSelected: Boolean, onClick: () -> Unit) {
         Text(text, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp), color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
     }
 }
-
-

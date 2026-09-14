@@ -1,4 +1,4 @@
-package org.fossify.filemanager.customtools.pdfunlocker
+﻿package org.fossify.filemanager.customtools.pdfunlocker
 
 import android.net.Uri
 import android.widget.Toast
@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.*
+import org.fossify.filemanager.customtools.sharing.NokoPrintHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +41,6 @@ fun PdfUnlockerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // --- State ---
     var sourcePdfUri by remember { mutableStateOf<Uri?>(null) }
     var unlockedPdfUri by remember { mutableStateOf<Uri?>(null) }
     var isUnlocked by remember { mutableStateOf(false) }
@@ -54,20 +54,17 @@ fun PdfUnlockerScreen(
     var errorText by remember { mutableStateOf<String?>(null) }
     var matchedPassword by remember { mutableStateOf("") }
 
-    // Defaults: Brute Force mode selected, 1950 to 2030 range
     var unlockMode by remember { mutableStateOf(UnlockMode.AADHAAR_FORCE) }
     var singlePassword by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
     var yearStart by remember { mutableStateOf("1950") }
     var yearEnd by remember { mutableStateOf("2030") }
 
-    // --- Core Logic: Detection ---
     val runFileCheck = { uri: Uri ->
         scope.launch {
             try {
                 sourcePdfUri = uri
                 fileName = PdfUnlockerLogic.getFileName(context, uri)
-                // Clear state for new file
                 unlockedPdfUri = null
                 isUnlocked = false
                 isUnlocking = false
@@ -75,13 +72,11 @@ fun PdfUnlockerScreen(
 
                 val result = PdfUnlockerLogic.checkProtectionStatus(context, uri)
                 if (result != null && result.isAlreadyUnprotected) {
-                    // Logic: INSTANT UNLOCK if not encrypted
                     unlockedPdfUri = result.unlockedUri
                     isUnlocked = true
                     matchedPassword = "No Password"
                     isPasswordProtected = false
                 } else {
-                    // Logic: SHOW UI if encrypted
                     isPasswordProtected = true
                 }
             } catch (e: Exception) {
@@ -114,7 +109,6 @@ fun PdfUnlockerScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // --- Document Info Card ---
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(28.dp), shadowElevation = 4.dp) {
             Column(Modifier.background(Brush.verticalGradient(listOf(Color(0xFFE91E63), Color(0xFFFF5252)))).padding(24.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -133,7 +127,6 @@ fun PdfUnlockerScreen(
             }
         }
 
-        // --- Content Flow ---
         if (sourcePdfUri == null) {
             PdfActionCard(title = "Select PDF", subtitle = "Choose a file to start", icon = Icons.Default.FileUpload, onClick = { selectPdfLauncher.launch("application/pdf") })
         } else if (isUnlocked) {
@@ -142,6 +135,11 @@ fun PdfUnlockerScreen(
                 unlockedUri = unlockedPdfUri!!,
                 onPreview = { PdfUnlockerLogic.previewPdf(context, unlockedPdfUri!!) },
                 onDownload = { scope.launch { PdfUnlockerLogic.saveToDownloads(context, unlockedPdfUri!!, fileName) } },
+                onPrint = {
+                    unlockedPdfUri?.let { uri ->
+                        NokoPrintHelper.printUri(context, uri, "application/pdf")
+                    }
+                },
                 onNavigateToTool = onNavigateToTool
             )
         } else if (isPasswordProtected == true) {
