@@ -1,4 +1,4 @@
-﻿import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.konan.properties.Properties
 import java.io.FileInputStream
@@ -147,7 +147,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
     implementation("com.google.mlkit:vision-common:17.3.0")
     // iText 7 for PrintPdfCombiner
-    implementation("com.itextpdf:itext7-core:7.2.5")
+    implementation("com.itextpdf:itext7-core:9.7.1")
 
     // Jetpack Compose BOM & Core
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
