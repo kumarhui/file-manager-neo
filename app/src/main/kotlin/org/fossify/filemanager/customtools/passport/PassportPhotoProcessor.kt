@@ -1,10 +1,11 @@
-package org.fossify.filemanager.customtools.passport
+﻿package org.fossify.filemanager.customtools.passport
 
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.ImageDecoder
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -148,7 +149,10 @@ object PassportPhotoProcessor {
      * 36 slots (6 cols x 6 rows)
      * Slot size = exactly 30 x 40 mm (no internal margin)
      * Gap = 2 mm
-     * Only filled slots have outer border lines.
+     * Dotted cut-lines per populated row:
+     *   - Top row: only bottom line
+     *   - Bottom row: only top line
+     *   - Middle rows: both top and bottom lines
      */
     suspend fun createA4PassportSheet(
         slotsMap: Map<Int, Bitmap>
@@ -182,6 +186,17 @@ object PassportPhotoProcessor {
             color = Color.BLACK
         }
 
+        val dottedLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 0.4f * mmToPx
+            color = Color.parseColor("#94A3B8")
+            // Dotted pattern (small dot of 4px followed by 10px spacing)
+            pathEffect = DashPathEffect(floatArrayOf(4f * (dpi / 150f), 8f * (dpi / 150f)), 0f)
+        }
+
+        val populatedRows = mutableSetOf<Int>()
+
+        // 1. Draw photos and frame borders
         for (slotIndex in 1..36) {
             val idx = slotIndex - 1
             val col = idx % cols
@@ -192,15 +207,39 @@ object PassportPhotoProcessor {
 
             val photoBitmap = slotsMap[slotIndex]
             if (photoBitmap != null) {
-                // Scales directly to full slot boundaries (no internal padding)
+                populatedRows.add(row)
+
                 val scaled = Bitmap.createScaledBitmap(photoBitmap, photoW, photoH, true)
                 canvas.drawBitmap(scaled, x, y, null)
-
-                // Only draw border for slots that have an image
                 canvas.drawRect(x, y, x + photoW, y + photoH, borderPaint)
 
                 if (scaled !== photoBitmap) {
                     scaled.recycle()
+                }
+            }
+        }
+
+        // 2. Draw horizontal dotted cutting lines across populated rows
+        val lineMargin = startX - (3f * mmToPx)
+        val lineEnd = startX + gridWidth + (3f * mmToPx)
+
+        for (row in populatedRows) {
+            val rowTopY = startY + row * (photoH + gap) - (gap / 2f)
+            val rowBottomY = startY + row * (photoH + gap) + photoH + (gap / 2f)
+
+            when (row) {
+                0 -> {
+                    // Top row: only on bottom
+                    canvas.drawLine(lineMargin, rowBottomY, lineEnd, rowBottomY, dottedLinePaint)
+                }
+                rows - 1 -> {
+                    // Bottom row: only on top
+                    canvas.drawLine(lineMargin, rowTopY, lineEnd, rowTopY, dottedLinePaint)
+                }
+                else -> {
+                    // Middle rows: both top and bottom
+                    canvas.drawLine(lineMargin, rowTopY, lineEnd, rowTopY, dottedLinePaint)
+                    canvas.drawLine(lineMargin, rowBottomY, lineEnd, rowBottomY, dottedLinePaint)
                 }
             }
         }

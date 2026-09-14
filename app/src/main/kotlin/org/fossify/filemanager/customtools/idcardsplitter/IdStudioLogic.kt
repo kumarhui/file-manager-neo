@@ -101,13 +101,17 @@ object IdStudioLogic {
             }
         }
 
-        val dashPaint = Paint().apply {
+        // Dotted cutting line paint
+        val dottedPaint = Paint().apply {
             color = Color.parseColor("#94A3B8")
             style = Paint.Style.STROKE
-            strokeWidth = 1.5f * (dpi / 150f)
-            pathEffect = DashPathEffect(floatArrayOf(16f, 12f), 0f)
+            strokeWidth = 0.4f * mmToPx
+            pathEffect = DashPathEffect(floatArrayOf(4f * (dpi / 150f), 8f * (dpi / 150f)), 0f)
             isAntiAlias = true
         }
+
+        val totalRows = 6
+        val populatedRows = mutableSetOf<Pair<Int, FloatArray>>() // row, [topY, bottomY]
 
         slots.forEach { (pos, data) ->
             val sFront = Bitmap.createScaledBitmap(data.front, idW, idH, true)
@@ -145,15 +149,42 @@ object IdStudioLogic {
             } else {
                 canvas.drawBitmap(sFront, startX, startY, null)
                 canvas.drawBitmap(sBack, startX + idW + gap, startY, null)
-            }
 
-            val lineY = startY + totalH + (3 * mmToPx)
-            val lineMargin = (8 * mmToPx)
-            canvas.drawLine(lineMargin, lineY, paperW - lineMargin, lineY, dashPaint)
+                // Track row bounds for non-stacked horizontal layout
+                val rowTop = startY - (3f * mmToPx)
+                val rowBottom = startY + totalH + (3f * mmToPx)
+                populatedRows.add(pos.ordinal to floatArrayOf(rowTop, rowBottom))
+            }
 
             sFront.recycle()
             sBack.recycle()
         }
+
+        // Draw conditional dotted horizontal lines across populated rows
+        val lineMargin = 8f * mmToPx
+        val lineEnd = paperW - lineMargin
+
+        for ((row, bounds) in populatedRows) {
+            val topY = bounds[0]
+            val bottomY = bounds[1]
+
+            when (row) {
+                0 -> {
+                    // Top row: only on bottom
+                    canvas.drawLine(lineMargin, bottomY, lineEnd, bottomY, dottedPaint)
+                }
+                totalRows - 1 -> {
+                    // Bottom row: only on top
+                    canvas.drawLine(lineMargin, topY, lineEnd, topY, dottedPaint)
+                }
+                else -> {
+                    // Middle rows (1..4): both top and bottom
+                    canvas.drawLine(lineMargin, topY, lineEnd, topY, dottedPaint)
+                    canvas.drawLine(lineMargin, bottomY, lineEnd, bottomY, dottedPaint)
+                }
+            }
+        }
+
         page
     }
 
