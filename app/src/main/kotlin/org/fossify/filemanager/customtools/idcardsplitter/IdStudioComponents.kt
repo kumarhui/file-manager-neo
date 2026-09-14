@@ -1,78 +1,148 @@
 ﻿package org.fossify.filemanager.customtools.idcardsplitter
 
 import android.graphics.Bitmap
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 
 @Composable
-fun IdCompositionGrid(
-    isStacked: Boolean,
+fun SlotSliderSelector(
+    positions: List<PrintPosition>,
+    selectedPosition: PrintPosition,
     slots: Map<PrintPosition, SlotData>,
-    draggingPos: PrintPosition?,
-    dragOffset: Offset,
-    slotBounds: MutableMap<PrintPosition, Rect>,
-    currentHoverTarget: PrintPosition?,
-    onSlotClick: (PrintPosition) -> Unit,
-    onClearSlot: (PrintPosition) -> Unit
+    onPositionChanged: (PrintPosition) -> Unit,
+    onAddOrReplace: () -> Unit,
+    onRemoveSlot: () -> Unit
 ) {
-    val positions = if (isStacked) {
-        listOf(PrintPosition.POS_1, PrintPosition.POS_2, PrintPosition.POS_3, PrintPosition.POS_4, PrintPosition.POS_5)
-    } else {
-        PrintPosition.entries
-    }
+    val currentIndex = positions.indexOf(selectedPosition).coerceAtLeast(0)
+    val hasCard = slots.containsKey(selectedPosition)
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("ID COMPOSITION GRID", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = Color.Gray)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "ROW POSITION SELECTOR",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.Gray
+                )
 
-        val rows = (positions.size + 1) / 2
-        repeat(rows) { rowIndex ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                repeat(2) { colIndex ->
-                    val index = rowIndex * 2 + colIndex
-                    if (index < positions.size) {
-                        val pos = positions[index]
-                        val isBeingDragged = draggingPos == pos
-                        val isHovered = currentHoverTarget == pos
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (hasCard) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
+                    border = BorderStroke(1.dp, if (hasCard) Color(0xFF86EFAC) else Color(0xFFCBD5E1))
+                ) {
+                    Text(
+                        text = if (hasCard) "● FILLED" else "○ BLANK",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hasCard) Color(0xFF15803D) else Color(0xFF64748B),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
 
-                        IdSlotItem(
-                            modifier = Modifier
-                                .weight(1f)
-                                .onGloballyPositioned { slotBounds[pos] = it.boundsInWindow() }
-                                .zIndex(if (isBeingDragged) 10f else 1f)
-                                .alpha(if (isBeingDragged) 0.1f else 1f),
-                            pos = pos,
-                            data = slots[pos],
-                            isHovered = isHovered,
-                            isStacked = isStacked,
-                            onClick = { if (draggingPos == null) onSlotClick(pos) },
-                            onClear = { if (draggingPos == null) onClearSlot(pos) }
-                        )
-                    } else {
-                        Spacer(Modifier.weight(1f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(
+                    onClick = { if (currentIndex > 0) onPositionChanged(positions[currentIndex - 1]) },
+                    enabled = currentIndex > 0,
+                    modifier = Modifier.size(34.dp).background(Color.White, CircleShape).border(1.dp, Color(0xFFE2E8F0), CircleShape)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Slot", modifier = Modifier.size(16.dp))
+                }
+
+                Slider(
+                    value = currentIndex.toFloat(),
+                    onValueChange = { floatVal ->
+                        val targetIdx = floatVal.toInt().coerceIn(0, positions.size - 1)
+                        onPositionChanged(positions[targetIdx])
+                    },
+                    valueRange = 0f..(positions.size - 1).toFloat(),
+                    steps = if (positions.size > 2) positions.size - 2 else 0,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+
+                IconButton(
+                    onClick = { if (currentIndex < positions.size - 1) onPositionChanged(positions[currentIndex + 1]) },
+                    enabled = currentIndex < positions.size - 1,
+                    modifier = Modifier.size(34.dp).background(Color.White, CircleShape).border(1.dp, Color(0xFFE2E8F0), CircleShape)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Slot", modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Current Row: ${currentIndex + 1} of ${positions.size}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B)
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (hasCard) {
+                        FilledTonalIconButton(
+                            onClick = onRemoveSlot,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Clear Slot", modifier = Modifier.size(16.dp), tint = Color.Red)
+                        }
+                    }
+
+                    Button(
+                        onClick = onAddOrReplace,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(if (hasCard) Icons.Default.Sync else Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (hasCard) "Replace" else "Add Card", fontSize = 11.sp)
                     }
                 }
             }
@@ -81,58 +151,37 @@ fun IdCompositionGrid(
 }
 
 @Composable
-fun IdSlotItem(
-    modifier: Modifier,
-    pos: PrintPosition,
-    data: SlotData?,
-    isHovered: Boolean,
-    isStacked: Boolean,
-    onClick: () -> Unit,
-    onClear: () -> Unit
+fun BackgroundOptionRow(
+    currentBg: PageBackground,
+    onSelectWhite: () -> Unit,
+    onSelectGallery: () -> Unit
 ) {
-    val tintColor by animateColorAsState(
-        targetValue = if (isHovered) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
-        label = "hover"
-    )
-
-    Surface(
-        modifier = modifier
-            .aspectRatio(2.5f)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        border = BorderStroke(
-            width = if (isHovered) 2.dp else 1.dp,
-            color = if (isHovered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-        )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.background(tintColor)) {
-            if (data != null) {
-                Row(Modifier.fillMaxSize().padding(6.dp), horizontalArrangement = Arrangement.Center) {
-                    Image(data.front.asImageBitmap(), null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Fit)
-                    Spacer(Modifier.width(4.dp))
-                    Image(data.back.asImageBitmap(), null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Fit)
-                }
-                IconButton(
-                    onClick = onClear,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(20.dp).background(Color.White.copy(0.8f), CircleShape)
-                ) {
-                    Icon(Icons.Default.RemoveCircleOutline, null, tint = Color.Red, modifier = Modifier.size(14.dp))
-                }
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = if (isHovered) Icons.Default.MoveToInbox else Icons.Outlined.AddPhotoAlternate,
-                        contentDescription = null,
-                        tint = if (isHovered) MaterialTheme.colorScheme.primary else Color.LightGray
-                    )
-                    val label = when {
-                        isStacked && pos == PrintPosition.POS_3 -> "CENTER"
-                        isStacked -> "QUAD ${pos.ordinal + 1}"
-                        else -> "ROW ${pos.ordinal + 1}"
-                    }
-                    Text(label, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (isHovered) MaterialTheme.colorScheme.primary else Color.Gray)
-                }
+        Text("Page Background", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = onSelectWhite,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(32.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                border = BorderStroke(1.dp, if (currentBg is PageBackground.White) MaterialTheme.colorScheme.primary else Color.LightGray)
+            ) {
+                Text("White", fontSize = 10.sp)
+            }
+
+            Button(
+                onClick = onSelectGallery,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(32.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp)
+            ) {
+                Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (currentBg is PageBackground.CustomImage) "Custom Bg" else "Gallery Bg", fontSize = 10.sp)
             }
         }
     }
@@ -148,62 +197,61 @@ fun FinalPreviewCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFBFBFD)),
+        border = BorderStroke(1.dp, Color(0xFFE5E7EB))
     ) {
-        Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "LIVE PAGE PREVIEW",
+                    "A4 LIVE PREVIEW",
                     fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.Gray
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.DarkGray
                 )
 
-                // Compact Icon Actions (Save, Share, Print)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilledTonalIconButton(
                         onClick = onSave,
                         enabled = bitmap != null && !isGenerating,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Icon(Icons.Default.SaveAlt, contentDescription = "Save image", modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.SaveAlt, contentDescription = "Save image", modifier = Modifier.size(18.dp))
                     }
 
                     FilledTonalIconButton(
                         onClick = onShare,
                         enabled = bitmap != null && !isGenerating,
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = "Share image", modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Share, contentDescription = "Share image", modifier = Modifier.size(18.dp))
                     }
 
                     FilledIconButton(
                         onClick = onPrint,
                         enabled = bitmap != null && !isGenerating,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(36.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Print, contentDescription = "Print page", modifier = Modifier.size(20.dp), tint = Color.White)
+                        Icon(Icons.Default.Print, contentDescription = "Print page", modifier = Modifier.size(18.dp), tint = Color.White)
                     }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // Strict A4 Sheet Aspect Ratio (210 x 297 mm ~= 1 : 1.414)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .padding(horizontal = 20.dp)
                     .aspectRatio(1f / 1.4142f)
-                    .shadow(6.dp, RoundedCornerShape(4.dp))
+                    .shadow(4.dp, RoundedCornerShape(3.dp))
                     .background(Color.White)
-                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(4.dp)),
+                    .border(0.8.dp, Color(0xFFCBD5E1), RoundedCornerShape(3.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (isGenerating) {
@@ -212,13 +260,14 @@ fun FinalPreviewCard(
                     Image(
                         bitmap = bitmap.asImageBitmap(),
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize().padding(10.dp),
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
                         contentScale = ContentScale.Fit
                     )
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Layers, null, Modifier.size(40.dp), Color.LightGray)
-                        Text("Preview will appear here", fontSize = 12.sp, color = Color.Gray)
+                        Icon(Icons.Default.Layers, null, Modifier.size(32.dp), Color.LightGray)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Add card using slider to generate preview", fontSize = 11.sp, color = Color.Gray)
                     }
                 }
             }
@@ -230,10 +279,10 @@ fun FinalPreviewCard(
 fun ResultItem(modifier: Modifier, label: String, bitmap: Bitmap?) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = Color.Gray)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Surface(
             modifier = Modifier.fillMaxWidth().aspectRatio(1.58f),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shadowElevation = 2.dp
         ) {
@@ -246,12 +295,12 @@ fun ResultItem(modifier: Modifier, label: String, bitmap: Bitmap?) {
 
 @Composable
 fun FlipControls(onHorizontalFlip: () -> Unit, onVerticalFlip: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-        IconButton(onClick = onHorizontalFlip, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(40.dp)) {
-            Icon(Icons.Default.Flip, null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        IconButton(onClick = onHorizontalFlip, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(36.dp)) {
+            Icon(Icons.Default.Flip, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        IconButton(onClick = onVerticalFlip, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(40.dp)) {
-            Icon(Icons.Default.Flip, null, modifier = Modifier.size(20.dp).graphicsLayer(rotationZ = 90f), tint = MaterialTheme.colorScheme.primary)
+        IconButton(onClick = onVerticalFlip, modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(36.dp)) {
+            Icon(Icons.Default.Flip, null, modifier = Modifier.size(18.dp).graphicsLayer(rotationZ = 90f), tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -260,8 +309,8 @@ fun FlipControls(onHorizontalFlip: () -> Unit, onVerticalFlip: () -> Unit) {
 fun PreviewCard(bitmap: Bitmap?, loading: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth().aspectRatio(1.58f),
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 6.dp,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
     ) {

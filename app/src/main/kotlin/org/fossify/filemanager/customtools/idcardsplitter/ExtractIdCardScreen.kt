@@ -9,7 +9,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,21 +17,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yalantis.ucrop.UCrop
@@ -41,7 +38,6 @@ import kotlinx.coroutines.launch
 import org.fossify.filemanager.customtools.sharing.NokoPrintHelper
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,9 +50,11 @@ fun ExtractIdCardScreen(
     val scope = rememberCoroutineScope()
 
     val pageSlots = remember { mutableStateMapOf<PrintPosition, SlotData>() }
-    var selectedSlot by remember { mutableStateOf<PrintPosition?>(null) }
+    var currentSlot by remember { mutableStateOf(PrintPosition.POS_1) }
     var paperSize by remember { mutableStateOf(PaperSize.A4) }
     var isStacked by remember { mutableStateOf(false) }
+    var pageBg by remember { mutableStateOf<PageBackground>(PageBackground.White) }
+    var optionsExpanded by remember { mutableStateOf(false) }
 
     var flowState by remember { mutableStateOf(FlowState.PAGE_OVERVIEW) }
     var isProcessing by remember { mutableStateOf(false) }
@@ -68,20 +66,21 @@ fun ExtractIdCardScreen(
     var splitBack by remember { mutableStateOf<Bitmap?>(null) }
     var finalPrintBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
-    var draggingPos by remember { mutableStateOf<PrintPosition?>(null) }
-    var dragFingerOffset by remember { mutableStateOf(Offset.Zero) }
-    val slotBounds = remember { mutableStateMapOf<PrintPosition, Rect>() }
-    var currentHoverTarget by remember { mutableStateOf<PrintPosition?>(null) }
+    val positions: List<PrintPosition> = if (isStacked) {
+        listOf(PrintPosition.POS_1, PrintPosition.POS_2, PrintPosition.POS_3, PrintPosition.POS_4, PrintPosition.POS_5)
+    } else {
+        PrintPosition.entries
+    }
 
-    LaunchedEffect(pageSlots.toMap(), paperSize, isStacked) {
+    LaunchedEffect(pageSlots.toMap(), paperSize, isStacked, pageBg) {
         if (pageSlots.isEmpty()) {
             finalPrintBitmap = null
             return@LaunchedEffect
         }
         isGeneratingPreview = true
-        delay(400)
+        delay(350L)
         try {
-            finalPrintBitmap = IdStudioLogic.createMultiPrintLayout(context, pageSlots.toMap(), paperSize, isStacked)
+            finalPrintBitmap = IdStudioLogic.createMultiPrintLayout(context, pageSlots.toMap(), paperSize, isStacked, pageBg)
         } finally {
             isGeneratingPreview = false
         }
@@ -112,11 +111,22 @@ fun ExtractIdCardScreen(
 
     LaunchedEffect(initialUri, initialUris) {
         val target = initialUris?.firstOrNull() ?: initialUri
-        target?.let { selectedSlot = PrintPosition.POS_1; handleFileSelection(it) }
+        target?.let { currentSlot = PrintPosition.POS_1; handleFileSelection(it) }
     }
 
-    val selectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val selectCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { handleFileSelection(it) }
+    }
+
+    val selectBgLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            scope.launch {
+                val bgBmp = IdStudioLogic.loadBitmapInternal(context, it)
+                if (bgBmp != null) {
+                    pageBg = PageBackground.CustomImage(bgBmp)
+                }
+            }
+        }
     }
 
     val cropLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -128,17 +138,14 @@ fun ExtractIdCardScreen(
                     workspaceBitmap = croppedBmp
 
                     if (croppedBmp != null) {
-                        // Slicing skipped by default unless 5 Stacked layout is selected
                         if (isStacked) {
                             splitFront = Bitmap.createBitmap(croppedBmp, 0, 0, croppedBmp.width / 2, croppedBmp.height)
                             splitBack = Bitmap.createBitmap(croppedBmp, croppedBmp.width / 2, 0, croppedBmp.width / 2, croppedBmp.height)
                             flowState = FlowState.SLICED
                         } else {
-                            // Non-stacked: Use directly as front & back
-                            val targetSlot = selectedSlot ?: PrintPosition.POS_1
                             splitFront = Bitmap.createBitmap(croppedBmp, 0, 0, croppedBmp.width / 2, croppedBmp.height)
                             splitBack = Bitmap.createBitmap(croppedBmp, croppedBmp.width / 2, 0, croppedBmp.width / 2, croppedBmp.height)
-                            pageSlots[targetSlot] = SlotData(splitFront!!, splitBack!!)
+                            pageSlots[currentSlot] = SlotData(splitFront!!, splitBack!!)
                             flowState = FlowState.PAGE_OVERVIEW
                         }
                     } else {
@@ -151,7 +158,11 @@ fun ExtractIdCardScreen(
     }
 
     BackHandler {
-        if (flowState == FlowState.PAGE_OVERVIEW) onBack() else flowState = FlowState.PAGE_OVERVIEW
+        if (flowState == FlowState.PAGE_OVERVIEW) {
+            onBack()
+        } else {
+            flowState = FlowState.PAGE_OVERVIEW
+        }
     }
 
     Scaffold(
@@ -163,7 +174,7 @@ fun ExtractIdCardScreen(
                 title = {
                     Text(
                         text = when (flowState) {
-                            FlowState.PAGE_OVERVIEW -> "ID Card Splitter & Multi-Print"
+                            FlowState.PAGE_OVERVIEW -> "ID Card Splitter & Layout"
                             FlowState.PREVIEW_READY -> "Step 1: Crop ID Area"
                             FlowState.CROPPED -> "Step 2: Confirm Layout"
                             FlowState.SLICED -> "Step 2: Flip & Confirm Stack"
@@ -175,7 +186,8 @@ fun ExtractIdCardScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (flowState == FlowState.PAGE_OVERVIEW) onBack() else flowState = FlowState.PAGE_OVERVIEW
+                        if (flowState == FlowState.PAGE_OVERVIEW) onBack()
+                        else flowState = FlowState.PAGE_OVERVIEW
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
                     }
@@ -198,100 +210,105 @@ fun ExtractIdCardScreen(
                                 .fillMaxSize()
                                 .background(Color.White)
                                 .verticalScroll(rememberScrollState())
-                                .pointerInput(Unit) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = { offset ->
-                                            val hit = slotBounds.entries.find { it.value.contains(offset) }?.key
-                                            if (hit != null && pageSlots.containsKey(hit)) {
-                                                draggingPos = hit
-                                                dragFingerOffset = offset
-                                            }
-                                        },
-                                        onDrag = { change, amount ->
-                                            change.consume()
-                                            dragFingerOffset += amount
-                                            currentHoverTarget = slotBounds.entries.find {
-                                                it.key != draggingPos && it.value.contains(dragFingerOffset)
-                                            }?.key
-                                        },
-                                        onDragEnd = {
-                                            if (draggingPos != null && currentHoverTarget != null) {
-                                                val fromData = pageSlots[draggingPos!!]
-                                                val toData = pageSlots[currentHoverTarget!!]
-                                                if (fromData != null) {
-                                                    if (toData != null) {
-                                                        pageSlots[draggingPos!!] = toData
-                                                        pageSlots[currentHoverTarget!!] = fromData
-                                                    } else {
-                                                        pageSlots[currentHoverTarget!!] = fromData
-                                                        pageSlots.remove(draggingPos!!)
-                                                    }
-                                                }
-                                            }
-                                            draggingPos = null; currentHoverTarget = null
-                                        },
-                                        onDragCancel = { draggingPos = null; currentHoverTarget = null }
-                                    )
-                                }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(20.dp)
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F9)),
-                                border = BorderStroke(1.dp, Color(0xFFE5E7EB))
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
                             ) {
-                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text("Paper Size", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
-                                            Spacer(Modifier.height(4.dp))
-                                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                                                PaperSize.entries.forEachIndexed { i, s ->
-                                                    SegmentedButton(
-                                                        selected = paperSize == s,
-                                                        onClick = { paperSize = s },
-                                                        shape = SegmentedButtonDefaults.itemShape(index = i, count = 2),
-                                                        label = { Text(s.name, fontSize = 11.sp) }
-                                                    )
+                                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { optionsExpanded = !optionsExpanded },
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("Page Configuration", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                            Text("${paperSize.name} • ${if (isStacked) "5 Stacked" else "6 Horizontal"}", fontSize = 10.sp, color = Color(0xFF64748B))
+                                        }
+                                        IconButton(onClick = { optionsExpanded = !optionsExpanded }, modifier = Modifier.size(28.dp)) {
+                                            Icon(if (optionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = "Expand Options", tint = Color.Gray)
+                                        }
+                                    }
+
+                                    AnimatedVisibility(visible = optionsExpanded) {
+                                        Column(
+                                            modifier = Modifier.padding(top = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text("Paper Size", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                                    Spacer(Modifier.height(4.dp))
+                                                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                                        PaperSize.entries.forEachIndexed { i, s ->
+                                                            SegmentedButton(
+                                                                selected = paperSize == s,
+                                                                onClick = { paperSize = s },
+                                                                shape = SegmentedButtonDefaults.itemShape(index = i, count = 2),
+                                                                label = { Text(s.name, fontSize = 10.sp) }
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Column(Modifier.weight(1.3f)) {
+                                                    Text("Layout Arrangement", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                                    Spacer(Modifier.height(4.dp))
+                                                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                                        SegmentedButton(
+                                                            selected = !isStacked,
+                                                            onClick = { isStacked = false },
+                                                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                                            label = { Text("6 Horiz", fontSize = 10.sp) }
+                                                        )
+                                                        SegmentedButton(
+                                                            selected = isStacked,
+                                                            onClick = { isStacked = true },
+                                                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                                            label = { Text("5 Stack", fontSize = 10.sp) }
+                                                        )
+                                                    }
                                                 }
                                             }
-                                        }
-                                        Column(Modifier.weight(1.3f)) {
-                                            Text("Layout Arrangement", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
-                                            Spacer(Modifier.height(4.dp))
-                                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                                                SegmentedButton(
-                                                    selected = !isStacked,
-                                                    onClick = { isStacked = false },
-                                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                                    label = { Text("6 Horizontal", fontSize = 10.sp) }
-                                                )
-                                                SegmentedButton(
-                                                    selected = isStacked,
-                                                    onClick = { isStacked = true },
-                                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                                    label = { Text("5 Stacked", fontSize = 10.sp) }
-                                                )
-                                            }
+
+                                            BackgroundOptionRow(
+                                                currentBg = pageBg,
+                                                onSelectWhite = { pageBg = PageBackground.White },
+                                                onSelectGallery = { selectBgLauncher.launch(arrayOf("image/*")) }
+                                            )
                                         }
                                     }
                                 }
                             }
 
-                            IdCompositionGrid(
-                                isStacked = isStacked,
+                            // Sliding the row selector immediately repositions the card in the preview
+                            SlotSliderSelector(
+                                positions = positions,
+                                selectedPosition = currentSlot,
                                 slots = pageSlots.toMap(),
-                                draggingPos = draggingPos,
-                                dragOffset = dragFingerOffset,
-                                slotBounds = slotBounds,
-                                currentHoverTarget = currentHoverTarget,
-                                onSlotClick = { pos ->
-                                    selectedSlot = pos
-                                    selectLauncher.launch(arrayOf("image/*", "application/pdf"))
+                                onPositionChanged = { newTargetSlot ->
+                                    if (currentSlot != newTargetSlot) {
+                                        val sourceData = pageSlots[currentSlot]
+                                        val targetData = pageSlots[newTargetSlot]
+
+                                        if (sourceData != null) {
+                                            pageSlots[newTargetSlot] = sourceData
+                                            if (targetData != null) {
+                                                pageSlots[currentSlot] = targetData
+                                            } else {
+                                                pageSlots.remove(currentSlot)
+                                            }
+                                        }
+                                    }
+                                    currentSlot = newTargetSlot
                                 },
-                                onClearSlot = { pageSlots.remove(it) }
+                                onAddOrReplace = { selectCardLauncher.launch(arrayOf("image/*", "application/pdf")) },
+                                onRemoveSlot = { pageSlots.remove(currentSlot) }
                             )
 
                             FinalPreviewCard(
@@ -311,7 +328,7 @@ fun ExtractIdCardScreen(
                                 }
                             )
 
-                            Spacer(Modifier.height(32.dp))
+                            Spacer(Modifier.height(24.dp))
                         }
                     }
                     else -> Column(
@@ -320,7 +337,7 @@ fun ExtractIdCardScreen(
                             .background(Color.White)
                             .verticalScroll(rememberScrollState())
                             .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         PreviewCard(workspaceBitmap, isProcessing)
@@ -345,8 +362,8 @@ fun ExtractIdCardScreen(
                                         cropLauncher.launch(intent)
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth().height(54.dp),
-                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 enabled = !isProcessing
                             ) {
@@ -376,44 +393,20 @@ fun ExtractIdCardScreen(
 
                             Button(
                                 onClick = {
-                                    selectedSlot?.let { pos ->
-                                        if (splitFront != null && splitBack != null) {
-                                            pageSlots[pos] = SlotData(splitFront!!, splitBack!!)
-                                        }
+                                    if (splitFront != null && splitBack != null) {
+                                        pageSlots[currentSlot] = SlotData(splitFront!!, splitBack!!)
                                     }
                                     flowState = FlowState.PAGE_OVERVIEW
                                 },
-                                modifier = Modifier.fillMaxWidth().height(54.dp),
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 enabled = !isProcessing
                             ) {
                                 Icon(Icons.Default.Check, null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("CONFIRM STACK POSITION")
                             }
-                        }
-                    }
-                }
-            }
-
-            // Drag Ghost
-            draggingPos?.let { pos ->
-                pageSlots[pos]?.let { data ->
-                    Surface(
-                        modifier = Modifier
-                            .size(140.dp, 44.dp)
-                            .offset { IntOffset(dragFingerOffset.x.roundToInt() - 200, dragFingerOffset.y.roundToInt() - 70) }
-                            .graphicsLayer { rotationZ = -2f; scaleX = 1.08f; scaleY = 1.08f }
-                            .shadow(16.dp, RoundedCornerShape(10.dp))
-                            .alpha(0.9f),
-                        color = Color.White,
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                    ) {
-                        Row(Modifier.fillMaxSize().padding(4.dp)) {
-                            Image(data.front.asImageBitmap(), null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Fit)
-                            Image(data.back.asImageBitmap(), null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Fit)
                         }
                     }
                 }

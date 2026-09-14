@@ -76,23 +76,31 @@ object IdStudioLogic {
         context: Context,
         slots: Map<PrintPosition, SlotData>,
         size: PaperSize,
-        stacked: Boolean
+        stacked: Boolean,
+        bg: PageBackground = PageBackground.White
     ): Bitmap = withContext(Dispatchers.Default) {
         val dpi = 300
         val mmToPx = dpi / 25.4f
         val paperW = ((if (size == PaperSize.A4) 210 else 105) * mmToPx).toInt()
         val paperH = ((if (size == PaperSize.A4) 297 else 148) * mmToPx).toInt()
 
-        val idW = (85.6f * mmToPx).toInt()
-        val idH = (53.98f * mmToPx).toInt()
-        val gap = (5 * mmToPx).toInt()
-        val pageTopMargin = (12 * mmToPx) // Top margin for document
+        val idW = (91.6f * mmToPx).toInt()
+        val idH = (57.8f * mmToPx).toInt()
+        val gap = (5.5f * mmToPx).toInt()
+        val pageTopMargin = (10 * mmToPx)
 
         val page = Bitmap.createBitmap(paperW, paperH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(page)
-        canvas.drawColor(Color.WHITE)
 
-        // Dashed line paint for the bottom boundary
+        when (bg) {
+            is PageBackground.White -> canvas.drawColor(Color.WHITE)
+            is PageBackground.SolidColor -> canvas.drawColor(bg.colorInt)
+            is PageBackground.CustomImage -> {
+                val scaledBg = Bitmap.createScaledBitmap(bg.bitmap, paperW, paperH, true)
+                canvas.drawBitmap(scaledBg, 0f, 0f, null)
+            }
+        }
+
         val dashPaint = Paint().apply {
             color = Color.parseColor("#94A3B8")
             style = Paint.Style.STROKE
@@ -139,7 +147,6 @@ object IdStudioLogic {
                 canvas.drawBitmap(sBack, startX + idW + gap, startY, null)
             }
 
-            // Draw horizontal dashed cut-line on bottom only (with 3mm padding below card)
             val lineY = startY + totalH + (3 * mmToPx)
             val lineMargin = (8 * mmToPx)
             canvas.drawLine(lineMargin, lineY, paperW - lineMargin, lineY, dashPaint)

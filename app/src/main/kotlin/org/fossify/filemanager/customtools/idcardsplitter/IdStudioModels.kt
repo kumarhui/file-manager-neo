@@ -16,3 +16,9 @@ data class SlotData(
     val front: Bitmap,
     val back: Bitmap
 )
+
+sealed class PageBackground {
+    data object White : PageBackground()
+    data class SolidColor(val colorInt: Int) : PageBackground()
+    data class CustomImage(val bitmap: Bitmap) : PageBackground()
+}
