@@ -1,71 +1,36 @@
 ﻿package org.fossify.filemanager.customtools.idcard
 
-import android.app.Activity
-import android.content.ContentValues
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.outlined.NoteAdd
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -73,420 +38,328 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
-import com.yalantis.ucrop.UCrop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.fossify.filemanager.R
-import org.fossify.filemanager.customtools.layout.IdCardLayoutEngine
-import org.fossify.filemanager.customtools.passport.PassportPhotoProcessor
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+
+const val ID_CARD_ASPECT_RATIO = 85.60f / 53.98f
+
+data class PagePair(
+    val left: Bitmap?,
+    val right: Bitmap?
+)
 
 class IdCardActivity : ComponentActivity() {
+
+    companion object {
+        const val EXTRA_IMAGE_PATHS = "extra_image_paths"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        val imagePaths = intent.getStringArrayListExtra(EXTRA_IMAGE_PATHS) ?: arrayListOf()
-        if (imagePaths.isEmpty()) {
-            Toast.makeText(this, "No image provided for ID Card", Toast.LENGTH_SHORT).show()
-            finish()
-            return
-        }
+        val paths = intent.getStringArrayListExtra(EXTRA_IMAGE_PATHS) ?: arrayListOf()
+        val uris = paths.map { Uri.fromFile(File(it)) }
 
         setContent {
             MaterialTheme {
-                IdCardScreen(
-                    initialPaths = imagePaths,
+                IdCardPipelineScreen(
+                    uris = uris,
                     onBack = { finish() }
                 )
             }
         }
     }
-
-    companion object {
-        const val EXTRA_IMAGE_PATHS = "extra_image_paths"
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IdCardScreen(
-    initialPaths: List<String>,
+fun IdCardPipelineScreen(
+    uris: List<Uri>,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var imagePaths by remember { mutableStateOf(initialPaths) }
-    var bitmaps by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
-    var selectedIndex by remember { mutableIntStateOf(0) }
+    var pageSlots by remember { mutableStateOf<List<Bitmap?>>(emptyList()) }
+    var isProcessing by remember { mutableStateOf(true) }
+    var progressStatus by remember { mutableStateOf("Initializing scanner engine...") }
 
-    var pages by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
-    var currentPageIndex by remember { mutableIntStateOf(0) }
-    var isGenerating by remember { mutableStateOf(false) }
-    var isVerticalLayout by remember { mutableStateOf(true) }
+    var previewPair by remember { mutableStateOf<PagePair?>(null) }
+    var previewSheetBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isGeneratingPreview by remember { mutableStateOf(false) }
 
-    LaunchedEffect(imagePaths) {
-        val loaded = imagePaths.mapNotNull { path ->
-            PassportPhotoProcessor.loadBitmap(context, Uri.fromFile(File(path)))
-        }
-        bitmaps = loaded
-    }
-
-    val cropLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { res ->
-        if (res.resultCode == Activity.RESULT_OK && res.data != null) {
-            val croppedUri = UCrop.getOutput(res.data!!)
-            croppedUri?.let { uri ->
-                scope.launch {
-                    val updated = PassportPhotoProcessor.loadBitmap(context, uri)
-                    if (updated != null && selectedIndex in bitmaps.indices) {
-                        val list = bitmaps.toMutableList()
-                        list[selectedIndex] = updated
-                        bitmaps = list
-                    }
+    LaunchedEffect(uris) {
+        withContext(Dispatchers.IO) {
+            val processed = mutableListOf<Bitmap>()
+            uris.forEachIndexed { index, uri ->
+                progressStatus = "Scanning document ${index + 1} of ${uris.size}..."
+                try {
+                    val bmp = FairScanIdPipeline.processDocument(context, uri)
+                    processed.add(bmp)
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
+            pageSlots = processed
         }
+        isProcessing = false
     }
 
-    val addImagesPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetMultipleContents()
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            scope.launch {
-                val newPaths = mutableListOf<String>()
-                uris.forEach { uri ->
-                    try {
-                        val stream = context.contentResolver.openInputStream(uri)
-                        val cacheFile = File(
-                            context.cacheDir,
-                            "imported_id_${System.currentTimeMillis()}_${(0..999).random()}.jpg"
-                        )
-                        FileOutputStream(cacheFile).use { out -> stream?.copyTo(out) }
-                        newPaths.add(cacheFile.absolutePath)
-                    } catch (_: Exception) {}
-                }
-                if (newPaths.isNotEmpty()) {
-                    imagePaths = imagePaths + newPaths
-                }
-            }
+    val pairs = remember(pageSlots) {
+        val list = mutableListOf<PagePair>()
+        var i = 0
+        while (i < pageSlots.size) {
+            val left = pageSlots.getOrNull(i)
+            val right = pageSlots.getOrNull(i + 1)
+            list.add(PagePair(left, right))
+            i += 2
         }
-    }
-
-    LaunchedEffect(bitmaps, isVerticalLayout) {
-        if (bitmaps.isEmpty()) return@LaunchedEffect
-        isGenerating = true
-        withContext(Dispatchers.Default) {
-            pages = IdCardLayoutEngine.createMultiPageSheets(bitmaps, isVerticalLayout)
-            if (currentPageIndex >= pages.size) {
-                currentPageIndex = (pages.size - 1).coerceAtLeast(0)
-            }
-        }
-        isGenerating = false
+        list
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("ID Card on A4", fontWeight = FontWeight.Bold) },
+                title = { Text("ID Card Pair Pipeline", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Loaded Images (${bitmaps.size}) - 2 per A4 sheet",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp
-            )
-
-            // Carousel with Add Button
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                itemsIndexed(bitmaps) { index, bmp ->
-                    val isSelected = index == selectedIndex
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(75.dp, 50.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(
-                                width = if (isSelected) 3.dp else 1.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { selectedIndex = index },
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                item {
-                    Box(
-                        modifier = Modifier
-                            .size(75.dp, 50.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
-                            .clickable { addImagesPicker.launch("image/*") },
-                        contentAlignment = Alignment.Center
+                actions = {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                val firstPair = pairs.firstOrNull { it.left != null || it.right != null }
+                                if (firstPair != null) {
+                                    val a4 = FairScanIdPipeline.generateA4CompositeSheet(context, firstPair.left, firstPair.right)
+                                    sendToNokoPrint(context, a4)
+                                }
+                            }
+                        },
+                        enabled = pairs.isNotEmpty() && !isProcessing
                     ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "Add Images",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            OutlinedButton(
-                onClick = {
-                    if (selectedIndex in imagePaths.indices) {
-                        val src = Uri.fromFile(File(imagePaths[selectedIndex]))
-                        val dest = Uri.fromFile(File(context.cacheDir, "id_crop_${System.currentTimeMillis()}.png"))
-
-                        val options = UCrop.Options().apply {
-                            withAspectRatio(85.6f, 53.98f)
-                            setHideBottomControls(false)
-                            setFreeStyleCropEnabled(false)
-                            setCompressionQuality(90)
-                            // Fix status bar overlap coloring
-                            setStatusBarColor(android.graphics.Color.parseColor("#1F1F1F"))
-                            setToolbarColor(android.graphics.Color.parseColor("#1F1F1F"))
-                            setToolbarWidgetColor(android.graphics.Color.WHITE)
-                        }
-
-                        val intent = UCrop.of(src, dest)
-                            .withOptions(options)
-                            .getIntent(context)
-
-                        cropLauncher.launch(intent)
+                        Icon(Icons.Default.Print, contentDescription = "Print first pair to NokoPrint", tint = Color(0xFF0284C7))
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Crop, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Crop Selected (ID-1 Aspect Ratio)")
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+            )
+        },
+        contentWindowInsets = WindowInsets.safeDrawing,
+        containerColor = Color.White
+    ) { innerPadding ->
+
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
+            if (pairs.isEmpty() && !isProcessing) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No documents loaded", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    itemsIndexed(pairs) { pairIndex, pair ->
+                        val leftSlotIndex = pairIndex * 2
+                        val rightSlotIndex = pairIndex * 2 + 1
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Left Card Slot
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(ID_CARD_ASPECT_RATIO)
+                                    ) {
+                                        if (pair.left != null) {
+                                            CardItem(
+                                                bitmap = pair.left,
+                                                label = "Left (${leftSlotIndex + 1})",
+                                                onClick = {
+                                                    // Isolate / Revert logic exactly like DocuLab
+                                                    val mutable = pageSlots.toMutableList()
+                                                    if (pair.right == null && rightSlotIndex < mutable.size) {
+                                                        // Revert: Pull next item into right slot
+                                                        mutable.removeAt(rightSlotIndex)
+                                                    } else if (pair.right != null) {
+                                                        // Isolate: Push right card down
+                                                        mutable.add(rightSlotIndex, null)
+                                                    }
+                                                    pageSlots = mutable
+                                                }
+                                            )
+                                        } else {
+                                            BlankSlotCard(label = "Empty (Click to close)") {
+                                                val mutable = pageSlots.toMutableList()
+                                                if (leftSlotIndex < mutable.size && mutable[leftSlotIndex] == null) {
+                                                    mutable.removeAt(leftSlotIndex)
+                                                    pageSlots = mutable
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Action Column (Swap & A4 Preview)
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                val mutable = pageSlots.toMutableList()
+                                                while (mutable.size <= rightSlotIndex) mutable.add(null)
+                                                val tmp = mutable[leftSlotIndex]
+                                                mutable[leftSlotIndex] = mutable[rightSlotIndex]
+                                                mutable[rightSlotIndex] = tmp
+                                                pageSlots = mutable
+                                            },
+                                            modifier = Modifier.size(36.dp).background(Color.White, CircleShape).border(1.dp, Color(0xFFE2E8F0), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.SwapHoriz, contentDescription = "Swap Pair", tint = Color(0xFF0284C7))
+                                        }
+
+                                        IconButton(
+                                            onClick = {
+                                                previewPair = pair
+                                                isGeneratingPreview = true
+                                                scope.launch {
+                                                    previewSheetBitmap = FairScanIdPipeline.generateA4CompositeSheet(context, pair.left, pair.right)
+                                                    isGeneratingPreview = false
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp).background(Color.White, CircleShape).border(1.dp, Color(0xFFE2E8F0), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.Visibility, contentDescription = "Preview on A4 Sheet", tint = Color(0xFF475569), modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+
+                                    // Right Card Slot
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(ID_CARD_ASPECT_RATIO)
+                                    ) {
+                                        if (pair.right != null) {
+                                            CardItem(
+                                                bitmap = pair.right,
+                                                label = "Right (${rightSlotIndex + 1})",
+                                                onClick = {
+                                                    // Isolate / Revert logic
+                                                    val mutable = pageSlots.toMutableList()
+                                                    if (pair.left == null && leftSlotIndex < mutable.size) {
+                                                        // Revert: Remove gap before it
+                                                        mutable.removeAt(leftSlotIndex)
+                                                    } else if (pair.left != null) {
+                                                        // Isolate: Push self into new row
+                                                        mutable.add(leftSlotIndex, null)
+                                                    }
+                                                    pageSlots = mutable
+                                                }
+                                            )
+                                        } else {
+                                            BlankSlotCard(label = "Empty (Click to close)") {
+                                                val mutable = pageSlots.toMutableList()
+                                                if (rightSlotIndex < mutable.size && mutable[rightSlotIndex] == null) {
+                                                    mutable.removeAt(rightSlotIndex)
+                                                    pageSlots = mutable
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            // Sheet Preview & Page Navigation
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            // General Processing Dialog
+            if (isProcessing) {
+                Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color.White, tonalElevation = 6.dp) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            Text(progressStatus, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.DarkGray)
+                        }
+                    }
+                }
+            }
+
+            // A4 Preview Modal Dialog for the tapped pair
+            previewPair?.let {
+                Dialog(
+                    onDismissRequest = { previewPair = null; previewSheetBitmap = null },
+                    properties = DialogProperties(usePlatformDefaultWidth = false)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = Color(0xFFF1F5F9)
                     ) {
-                        Column {
-                            Text(
-                                text = "Page ${if (pages.isEmpty()) 0 else currentPageIndex + 1} of ${pages.size}",
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (isVerticalLayout) "Layout: Top-Bottom" else "Layout: Left-Right",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            // Layout Switch Icon (Toggles Vertical / Horizontal)
-                            IconButton(
-                                onClick = {
-                                    isVerticalLayout = !isVerticalLayout
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_tool_a4),
-                                    contentDescription = "Switch Layout Style",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            // Swap Individual Card Icon (Interchanges selected image with its pair)
-                            IconButton(
-                                onClick = {
-                                    if (bitmaps.size >= 2 && selectedIndex >= 0) {
-                                        val mutableBitmaps = bitmaps.toMutableList()
-                                        val targetIndex = if (selectedIndex % 2 == 0) {
-                                            (selectedIndex + 1).coerceAtMost(mutableBitmaps.size - 1)
-                                        } else {
-                                            (selectedIndex - 1).coerceAtLeast(0)
-                                        }
-                                        if (targetIndex != selectedIndex) {
-                                            val temp = mutableBitmaps[selectedIndex]
-                                            mutableBitmaps[selectedIndex] = mutableBitmaps[targetIndex]
-                                            mutableBitmaps[targetIndex] = temp
-                                            bitmaps = mutableBitmaps
-                                            selectedIndex = targetIndex
-                                        }
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            TopAppBar(
+                                title = { Text("A4 Layout Preview", fontWeight = FontWeight.Bold) },
+                                navigationIcon = {
+                                    IconButton(onClick = { previewPair = null; previewSheetBitmap = null }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Close")
                                     }
                                 },
-                                modifier = Modifier.size(36.dp)
+                                actions = {
+                                    Button(
+                                        onClick = {
+                                            previewSheetBitmap?.let { bmp -> sendToNokoPrint(context, bmp) }
+                                        },
+                                        enabled = previewSheetBitmap != null && !isGeneratingPreview,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Print Sheet")
+                                    }
+                                }
+                            )
+
+                            Box(
+                                modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_tool_crop),
-                                    contentDescription = "Swap Individual Card Position",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            if (pages.size > 1) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    FilledTonalButton(
-                                        onClick = { if (currentPageIndex > 0) currentPageIndex-- },
-                                        enabled = currentPageIndex > 0,
-                                        modifier = Modifier.height(34.dp)
+                                if (isGeneratingPreview) {
+                                    CircularProgressIndicator()
+                                } else if (previewSheetBitmap != null) {
+                                    Card(
+                                        shape = RoundedCornerShape(4.dp),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                                        modifier = Modifier.fillMaxHeight().aspectRatio(1f / 1.4142f)
                                     ) {
-                                        Text("Prev", fontSize = 11.sp)
-                                    }
-                                    FilledTonalButton(
-                                        onClick = { if (currentPageIndex < pages.size - 1) currentPageIndex++ },
-                                        enabled = currentPageIndex < pages.size - 1,
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Text("Next", fontSize = 11.sp)
+                                        Image(
+                                            bitmap = previewSheetBitmap!!.asImageBitmap(),
+                                            contentDescription = "A4 Preview Sheet",
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier.fillMaxSize().background(Color.White)
+                                        )
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(390.dp)
-                            .background(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                RoundedCornerShape(12.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isGenerating) {
-                            CircularProgressIndicator()
-                        } else {
-                            pages.getOrNull(currentPageIndex)?.let { bmp ->
-                                Image(
-                                    bitmap = bmp.asImageBitmap(),
-                                    contentDescription = "A4 ID Card Sheet",
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(8.dp),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // Actions
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        IconButton(onClick = {
-                            pages.getOrNull(currentPageIndex)?.let { bmp ->
-                                scope.launch {
-                                    val uri = saveIdCardPageToDownloads(context, bmp, currentPageIndex + 1)
-                                    Toast.makeText(
-                                        context,
-                                        if (uri != null) "Saved Page ${currentPageIndex + 1} to Downloads" else "Failed to save",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        }) {
-                            Icon(Icons.Default.Download, contentDescription = "Download Current Page")
-                        }
-
-                        IconButton(onClick = {
-                            pages.getOrNull(currentPageIndex)?.let { bmp ->
-                                scope.launch {
-                                    val file = saveIdCardTempFile(context, bmp)
-                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "image/jpeg"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        setPackage("com.noco.print")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-                                    }
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (_: Exception) {
-                                        intent.setPackage("com.nokoprint")
-                                        try {
-                                            context.startActivity(intent)
-                                        } catch (_: Exception) {
-                                            Toast.makeText(context, "NokoPrint not installed", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            }
-                        }) {
-                            Icon(Icons.Default.Print, contentDescription = "Print Current Page")
-                        }
-
-                        IconButton(onClick = {
-                            pages.getOrNull(currentPageIndex)?.let { bmp ->
-                                scope.launch {
-                                    val file = saveIdCardTempFile(context, bmp)
-                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "image/jpeg"
-                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                        setPackage("com.whatsapp")
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (_: Exception) {
-                                        Toast.makeText(context, "WhatsApp not installed", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share via WhatsApp")
                         }
                     }
                 }
@@ -495,41 +368,85 @@ fun IdCardScreen(
     }
 }
 
-suspend fun saveIdCardPageToDownloads(context: Context, bitmap: Bitmap, pageNumber: Int): Uri? = withContext(Dispatchers.IO) {
-    try {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val filename = "ID_Card_A4_Page${pageNumber}_$timestamp.jpg"
-
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+@Composable
+private fun CardItem(
+    bitmap: Bitmap,
+    label: String,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+        modifier = Modifier.fillMaxSize().clickable(onClick = onClick)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().background(Color.White)
+            )
+            Surface(
+                color = Color.Black.copy(alpha = 0.55f),
+                shape = RoundedCornerShape(bottomEnd = 6.dp),
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 9.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
             }
         }
-
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        } else {
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        }
-
-        val uri = context.contentResolver.insert(collection, values)
-        uri?.let {
-            context.contentResolver.openOutputStream(it)?.use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
-            }
-        }
-        uri
-    } catch (_: Exception) {
-        null
     }
 }
 
-suspend fun saveIdCardTempFile(context: Context, bitmap: Bitmap): File = withContext(Dispatchers.IO) {
-    val file = File(context.cacheDir, "id_card_page_${System.currentTimeMillis()}.jpg")
-    FileOutputStream(file).use { out ->
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+@Composable
+private fun BlankSlotCard(
+    label: String,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
+        border = BorderStroke(1.5.dp, Color(0xFFCBD5E1)),
+        modifier = Modifier.fillMaxSize().clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Outlined.NoteAdd, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(label, fontSize = 10.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Medium)
+        }
     }
-    file
+}
+
+private fun sendToNokoPrint(context: android.content.Context, sheet: Bitmap) {
+    try {
+        val cacheFolder = File(context.cacheDir, "id_print_sheets").apply { mkdirs() }
+        val tempFile = File(cacheFolder, "ID_A4_${System.currentTimeMillis()}.png")
+        FileOutputStream(tempFile).use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }
+
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", tempFile)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        intent.setPackage("com.nokoprint")
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            intent.setPackage("com.noco.print")
+            context.startActivity(intent)
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Could not launch NokoPrint: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
 }

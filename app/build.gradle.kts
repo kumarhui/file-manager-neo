@@ -141,8 +141,10 @@ detekt {
 dependencies {
     implementation("com.github.yalantis:ucrop:2.2.8")
     // Google ML Kit
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("com.google.mlkit:text-recognition:16.0.1")
-        implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
     implementation("com.google.mlkit:vision-common:17.3.0")
     // iText 7 for PrintPdfCombiner
     implementation("com.itextpdf:itext7-core:7.2.5")
@@ -150,7 +152,7 @@ dependencies {
     // Jetpack Compose BOM & Core
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
-        implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.foundation:foundation-layout")
     implementation("androidx.compose.ui:ui-graphics")
