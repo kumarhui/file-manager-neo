@@ -86,49 +86,6 @@ fun ExtractIdCardScreen(
         }
     }
 
-    val handleFileSelection = { uri: Uri ->
-        flowState = FlowState.PREVIEW_READY
-        isProcessing = true
-        scope.launch {
-            try {
-                workspaceBitmap = null
-                val mimeType = context.contentResolver.getType(uri) ?: ""
-                val isPdf = mimeType.contains("pdf") || uri.toString().lowercase().endsWith(".pdf")
-
-                val bitmap = if (isPdf) IdStudioLogic.renderPdfFirstPageInternal(context, uri)
-                else IdStudioLogic.loadBitmapInternal(context, uri)
-
-                workspaceBitmap = bitmap
-                workspaceBitmap?.let {
-                    currentSourceUri = IdStudioLogic.saveBitmapToTempInternal(context, it)
-                }
-            } catch (e: Exception) {
-                Toast.makeText(context, "Error loading file", Toast.LENGTH_SHORT).show()
-                flowState = FlowState.PAGE_OVERVIEW
-            } finally { isProcessing = false }
-        }
-    }
-
-    LaunchedEffect(initialUri, initialUris) {
-        val target = initialUris?.firstOrNull() ?: initialUri
-        target?.let { currentSlot = PrintPosition.POS_1; handleFileSelection(it) }
-    }
-
-    val selectCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { handleFileSelection(it) }
-    }
-
-    val selectBgLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let {
-            scope.launch {
-                val bgBmp = IdStudioLogic.loadBitmapInternal(context, it)
-                if (bgBmp != null) {
-                    pageBg = PageBackground.CustomImage(bgBmp)
-                }
-            }
-        }
-    }
-
     val cropLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             UCrop.getOutput(result.data!!)?.let { uri ->
@@ -152,6 +109,72 @@ fun ExtractIdCardScreen(
                         flowState = FlowState.PAGE_OVERVIEW
                     }
                     isProcessing = false
+                }
+            }
+        }
+    }
+
+    val launchCropForUri = { uri: Uri ->
+        val dest = Uri.fromFile(File(context.cacheDir, "crop_${System.currentTimeMillis()}.png"))
+        val options = UCrop.Options().apply {
+            withAspectRatio(3.1f, 1f)
+            setFreeStyleCropEnabled(true)
+            setHideBottomControls(false)
+            setToolbarColor(android.graphics.Color.WHITE)
+            setStatusBarColor(android.graphics.Color.WHITE)
+            setToolbarWidgetColor(android.graphics.Color.BLACK)
+            setToolbarTitle("Crop ID Area")
+        }
+        val intent = UCrop.of(uri, dest).withOptions(options).getIntent(context)
+        cropLauncher.launch(intent)
+    }
+
+    // Direct image loader (bypasses automatic crop, loads directly into page overview)
+    val handleFileSelectionDirect = { uri: Uri ->
+        isProcessing = true
+        scope.launch {
+            try {
+                val mimeType = context.contentResolver.getType(uri) ?: ""
+                val isPdf = mimeType.contains("pdf") || uri.toString().lowercase().endsWith(".pdf")
+
+                val bitmap = if (isPdf) IdStudioLogic.renderPdfFirstPageInternal(context, uri)
+                else IdStudioLogic.loadBitmapInternal(context, uri)
+
+                if (bitmap != null) {
+                    workspaceBitmap = bitmap
+                    currentSourceUri = IdStudioLogic.saveBitmapToTempInternal(context, bitmap)
+
+                    val front = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width / 2, bitmap.height)
+                    val back = Bitmap.createBitmap(bitmap, bitmap.width / 2, 0, bitmap.width / 2, bitmap.height)
+                    pageSlots[currentSlot] = SlotData(front, back)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error loading file", Toast.LENGTH_SHORT).show()
+            } finally {
+                flowState = FlowState.PAGE_OVERVIEW
+                isProcessing = false
+            }
+        }
+    }
+
+    LaunchedEffect(initialUri, initialUris) {
+        val target = initialUris?.firstOrNull() ?: initialUri
+        target?.let {
+            currentSlot = PrintPosition.POS_1
+            handleFileSelectionDirect(it)
+        }
+    }
+
+    val selectCardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { handleFileSelectionDirect(it) }
+    }
+
+    val selectBgLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            scope.launch {
+                val bgBmp = IdStudioLogic.loadBitmapInternal(context, it)
+                if (bgBmp != null) {
+                    pageBg = PageBackground.CustomImage(bgBmp)
                 }
             }
         }
@@ -286,7 +309,7 @@ fun ExtractIdCardScreen(
                                 }
                             }
 
-                            // Sliding the row selector immediately repositions the card in the preview
+                            // Slider selector with dedicated crop icon button replacing the old delete icon
                             SlotSliderSelector(
                                 positions = positions,
                                 selectedPosition = currentSlot,
@@ -308,7 +331,24 @@ fun ExtractIdCardScreen(
                                     currentSlot = newTargetSlot
                                 },
                                 onAddOrReplace = { selectCardLauncher.launch(arrayOf("image/*", "application/pdf")) },
-                                onRemoveSlot = { pageSlots.remove(currentSlot) }
+                                onCropSlot = {
+                                    val slotData = pageSlots[currentSlot]
+                                    if (slotData != null) {
+                                        scope.launch {
+                                            val combinedW = slotData.front.width + slotData.back.width
+                                            val combinedH = maxOf(slotData.front.height, slotData.back.height)
+                                            val combined = Bitmap.createBitmap(combinedW, combinedH, Bitmap.Config.ARGB_8888)
+                                            val canvas = android.graphics.Canvas(combined)
+                                            canvas.drawBitmap(slotData.front, 0f, 0f, null)
+                                            canvas.drawBitmap(slotData.back, slotData.front.width.toFloat(), 0f, null)
+
+                                            val tempUri = IdStudioLogic.saveBitmapToTempInternal(context, combined)
+                                            launchCropForUri(tempUri)
+                                        }
+                                    } else currentSourceUri?.let { uri ->
+                                        launchCropForUri(uri)
+                                    }
+                                }
                             )
 
                             FinalPreviewCard(
@@ -345,22 +385,7 @@ fun ExtractIdCardScreen(
                         if (state == FlowState.PREVIEW_READY) {
                             Button(
                                 onClick = {
-                                    currentSourceUri?.let { uri ->
-                                        val dest = Uri.fromFile(File(context.cacheDir, "crop_${System.currentTimeMillis()}.png"))
-                                        val options = UCrop.Options().apply {
-                                            withAspectRatio(3.1f, 1f)
-                                            setFreeStyleCropEnabled(true)
-                                            setHideBottomControls(false)
-                                            setToolbarColor(android.graphics.Color.WHITE)
-                                            setStatusBarColor(android.graphics.Color.WHITE)
-                                            setToolbarWidgetColor(android.graphics.Color.BLACK)
-                                            setToolbarTitle("Crop ID Area")
-                                        }
-                                        val intent = UCrop.of(uri, dest)
-                                            .withOptions(options)
-                                            .getIntent(context)
-                                        cropLauncher.launch(intent)
-                                    }
+                                    currentSourceUri?.let { uri -> launchCropForUri(uri) }
                                 },
                                 modifier = Modifier.fillMaxWidth().height(52.dp),
                                 shape = RoundedCornerShape(14.dp),

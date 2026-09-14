@@ -33,7 +33,7 @@ fun SlotSliderSelector(
     slots: Map<PrintPosition, SlotData>,
     onPositionChanged: (PrintPosition) -> Unit,
     onAddOrReplace: () -> Unit,
-    onRemoveSlot: () -> Unit
+    onCropSlot: () -> Unit
 ) {
     val currentIndex = positions.indexOf(selectedPosition).coerceAtLeast(0)
     val hasCard = slots.containsKey(selectedPosition)
@@ -127,10 +127,10 @@ fun SlotSliderSelector(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (hasCard) {
                         FilledTonalIconButton(
-                            onClick = onRemoveSlot,
+                            onClick = onCropSlot,
                             modifier = Modifier.size(36.dp)
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Clear Slot", modifier = Modifier.size(16.dp), tint = Color.Red)
+                            Icon(Icons.Default.Crop, contentDescription = "Crop Card", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                         }
                     }
 
