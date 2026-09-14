@@ -203,19 +203,12 @@ class CustomToolsDialogFragment : DialogFragment() {
             }
 
             ToolId.CROP_IMAGE -> {
-                val sourceUri = Uri.fromFile(File(imagePath))
-                val destinationUri = Uri.fromFile(
-                    File(requireContext().cacheDir, "crop_${System.currentTimeMillis()}.png")
+                dismiss()
+                org.fossify.filemanager.customtools.ui.CropImageTool.show(
+                    context = requireContext(),
+                    imagePath = imagePath,
+                    continueToPassport = false
                 )
-                val uCropIntent = UCrop.of(sourceUri, destinationUri)
-                    .withOptions(UCrop.Options().apply {
-                        setFreeStyleCropEnabled(true)
-                        setStatusBarColor(android.graphics.Color.WHITE)
-                        setToolbarColor(android.graphics.Color.WHITE)
-                        setToolbarWidgetColor(android.graphics.Color.BLACK)
-                    })
-                    .getIntent(requireContext())
-                cropImageLauncher.launch(uCropIntent)
             }
 
             ToolId.COMPRESS_IMAGE -> {
