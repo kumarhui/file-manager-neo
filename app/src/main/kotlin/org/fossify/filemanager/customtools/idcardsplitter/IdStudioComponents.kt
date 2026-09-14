@@ -143,61 +143,83 @@ fun FinalPreviewCard(
     bitmap: Bitmap?,
     isGenerating: Boolean,
     onSave: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onPrint: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("LIVE PAGE PREVIEW", fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+        Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "LIVE PAGE PREVIEW",
+                    fontWeight = FontWeight.Black,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.Gray
+                )
 
-            Spacer(Modifier.height(16.dp))
+                // Compact Icon Actions (Save, Share, Print)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalIconButton(
+                        onClick = onSave,
+                        enabled = bitmap != null && !isGenerating,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(Icons.Default.SaveAlt, contentDescription = "Save image", modifier = Modifier.size(20.dp))
+                    }
 
+                    FilledTonalIconButton(
+                        onClick = onShare,
+                        enabled = bitmap != null && !isGenerating,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Share image", modifier = Modifier.size(20.dp))
+                    }
+
+                    FilledIconButton(
+                        onClick = onPrint,
+                        enabled = bitmap != null && !isGenerating,
+                        modifier = Modifier.size(40.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Print, contentDescription = "Print page", modifier = Modifier.size(20.dp), tint = Color.White)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // Strict A4 Sheet Aspect Ratio (210 x 297 mm ~= 1 : 1.414)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(320.dp)
-                    .shadow(4.dp, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 24.dp)
+                    .aspectRatio(1f / 1.4142f)
+                    .shadow(6.dp, RoundedCornerShape(4.dp))
                     .background(Color.White)
-                    .border(0.5.dp, Color.LightGray.copy(0.3f)),
+                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(4.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (isGenerating) {
                     CircularProgressIndicator(strokeWidth = 3.dp)
                 } else if (bitmap != null) {
-                    Image(bitmap.asImageBitmap(), null, Modifier.fillMaxSize().padding(10.dp), contentScale = ContentScale.Fit)
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().padding(10.dp),
+                        contentScale = ContentScale.Fit
+                    )
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Layers, null, Modifier.size(40.dp), Color.LightGray)
                         Text("Preview will appear here", fontSize = 12.sp, color = Color.Gray)
                     }
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = onSave,
-                    enabled = bitmap != null && !isGenerating,
-                    modifier = Modifier.weight(1f).height(54.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(Icons.Default.SaveAlt, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("SAVE")
-                }
-                Button(
-                    onClick = onShare,
-                    enabled = bitmap != null && !isGenerating,
-                    modifier = Modifier.weight(1f).height(54.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(Icons.Default.Share, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("SHARE")
                 }
             }
         }

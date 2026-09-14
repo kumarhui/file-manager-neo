@@ -38,7 +38,9 @@ import androidx.compose.ui.unit.sp
 import com.yalantis.ucrop.UCrop
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.fossify.filemanager.customtools.sharing.NokoPrintHelper
 import java.io.File
+import java.io.FileOutputStream
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +79,7 @@ fun ExtractIdCardScreen(
             return@LaunchedEffect
         }
         isGeneratingPreview = true
-        delay(500)
+        delay(400)
         try {
             finalPrintBitmap = IdStudioLogic.createMultiPrintLayout(context, pageSlots.toMap(), paperSize, isStacked)
         } finally {
@@ -122,8 +124,26 @@ fun ExtractIdCardScreen(
             UCrop.getOutput(result.data!!)?.let { uri ->
                 scope.launch {
                     isProcessing = true
-                    workspaceBitmap = IdStudioLogic.loadBitmapInternal(context, uri)
-                    flowState = FlowState.CROPPED
+                    val croppedBmp = IdStudioLogic.loadBitmapInternal(context, uri)
+                    workspaceBitmap = croppedBmp
+
+                    if (croppedBmp != null) {
+                        // Slicing skipped by default unless 5 Stacked layout is selected
+                        if (isStacked) {
+                            splitFront = Bitmap.createBitmap(croppedBmp, 0, 0, croppedBmp.width / 2, croppedBmp.height)
+                            splitBack = Bitmap.createBitmap(croppedBmp, croppedBmp.width / 2, 0, croppedBmp.width / 2, croppedBmp.height)
+                            flowState = FlowState.SLICED
+                        } else {
+                            // Non-stacked: Use directly as front & back
+                            val targetSlot = selectedSlot ?: PrintPosition.POS_1
+                            splitFront = Bitmap.createBitmap(croppedBmp, 0, 0, croppedBmp.width / 2, croppedBmp.height)
+                            splitBack = Bitmap.createBitmap(croppedBmp, croppedBmp.width / 2, 0, croppedBmp.width / 2, croppedBmp.height)
+                            pageSlots[targetSlot] = SlotData(splitFront!!, splitBack!!)
+                            flowState = FlowState.PAGE_OVERVIEW
+                        }
+                    } else {
+                        flowState = FlowState.PAGE_OVERVIEW
+                    }
                     isProcessing = false
                 }
             }
@@ -145,8 +165,8 @@ fun ExtractIdCardScreen(
                         text = when (flowState) {
                             FlowState.PAGE_OVERVIEW -> "ID Card Splitter & Multi-Print"
                             FlowState.PREVIEW_READY -> "Step 1: Crop ID Area"
-                            FlowState.CROPPED -> "Step 2: Slice Front & Back"
-                            FlowState.SLICED -> "Step 3: Preview & Confirm"
+                            FlowState.CROPPED -> "Step 2: Confirm Layout"
+                            FlowState.SLICED -> "Step 2: Flip & Confirm Stack"
                         },
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -160,11 +180,7 @@ fun ExtractIdCardScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.Black)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White,
-                    titleContentColor = Color.Black,
-                    navigationIconContentColor = Color.Black
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
             )
         }
     ) { innerPadding ->
@@ -282,7 +298,17 @@ fun ExtractIdCardScreen(
                                 bitmap = finalPrintBitmap,
                                 isGenerating = isGeneratingPreview,
                                 onSave = { finalPrintBitmap?.let { IdStudioLogic.saveToDownloadsInternal(context, it, "ID_Compose") } },
-                                onShare = { finalPrintBitmap?.let { IdStudioLogic.shareImageInternal(context, it) } }
+                                onShare = { finalPrintBitmap?.let { IdStudioLogic.shareImageInternal(context, it) } },
+                                onPrint = {
+                                    finalPrintBitmap?.let { bmp ->
+                                        scope.launch {
+                                            val cacheFolder = File(context.cacheDir, "id_print_sheets").apply { mkdirs() }
+                                            val tempFile = File(cacheFolder, "ID_Multi_${System.currentTimeMillis()}.png")
+                                            FileOutputStream(tempFile).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                                            NokoPrintHelper.print(context, listOf(tempFile.absolutePath))
+                                        }
+                                    }
+                                }
                             )
 
                             Spacer(Modifier.height(32.dp))
@@ -311,7 +337,7 @@ fun ExtractIdCardScreen(
                                             setToolbarColor(android.graphics.Color.WHITE)
                                             setStatusBarColor(android.graphics.Color.WHITE)
                                             setToolbarWidgetColor(android.graphics.Color.BLACK)
-                                            setToolbarTitle("Crop ID (Front & Back)")
+                                            setToolbarTitle("Crop ID Area")
                                         }
                                         val intent = UCrop.of(uri, dest)
                                             .withOptions(options)
@@ -327,26 +353,6 @@ fun ExtractIdCardScreen(
                                 Icon(Icons.Default.Crop, null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("CROP ID AREA (3.1 : 1)")
-                            }
-                        }
-
-                        if (state == FlowState.CROPPED) {
-                            Button(
-                                onClick = {
-                                    workspaceBitmap?.let { bmp ->
-                                        splitFront = Bitmap.createBitmap(bmp, 0, 0, bmp.width / 2, bmp.height)
-                                        splitBack = Bitmap.createBitmap(bmp, bmp.width / 2, 0, bmp.width / 2, bmp.height)
-                                        flowState = FlowState.SLICED
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(54.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                enabled = !isProcessing
-                            ) {
-                                Icon(Icons.Default.ContentCut, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("EXTRACT SIDES (SPLIT 50/50)")
                             }
                         }
 
@@ -384,14 +390,14 @@ fun ExtractIdCardScreen(
                             ) {
                                 Icon(Icons.Default.Check, null)
                                 Spacer(Modifier.width(8.dp))
-                                Text("CONFIRM SLOT POSITION")
+                                Text("CONFIRM STACK POSITION")
                             }
                         }
                     }
                 }
             }
 
-            // Animated Drag-and-Drop Floating Ghost
+            // Drag Ghost
             draggingPos?.let { pos ->
                 pageSlots[pos]?.let { data ->
                     Surface(

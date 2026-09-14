@@ -86,10 +86,20 @@ object IdStudioLogic {
         val idW = (85.6f * mmToPx).toInt()
         val idH = (53.98f * mmToPx).toInt()
         val gap = (5 * mmToPx).toInt()
+        val pageTopMargin = (12 * mmToPx) // Top margin for document
 
         val page = Bitmap.createBitmap(paperW, paperH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(page)
         canvas.drawColor(Color.WHITE)
+
+        // Dashed line paint for the bottom boundary
+        val dashPaint = Paint().apply {
+            color = Color.parseColor("#94A3B8")
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f * (dpi / 150f)
+            pathEffect = DashPathEffect(floatArrayOf(16f, 12f), 0f)
+            isAntiAlias = true
+        }
 
         slots.forEach { (pos, data) ->
             val sFront = Bitmap.createScaledBitmap(data.front, idW, idH, true)
@@ -99,24 +109,25 @@ object IdStudioLogic {
             val totalH = if (stacked) (idH * 2 + gap) else idH
 
             var startX = (paperW / 2f - totalW / 2f)
-            var startY = 0f
+            var startY = pageTopMargin
 
             if (size == PaperSize.A6) {
-                startY = (paperH / 2f - totalH / 2f)
+                startY = pageTopMargin + (paperH - pageTopMargin) / 2f - totalH / 2f
             } else {
                 if (stacked) {
                     val margin = (15 * mmToPx).toInt()
-                    when(pos) {
-                        PrintPosition.POS_1 -> { startX = margin.toFloat(); startY = margin.toFloat() }
-                        PrintPosition.POS_2 -> { startX = (paperW - totalW - margin).toFloat(); startY = margin.toFloat() }
-                        PrintPosition.POS_3 -> { startX = (paperW/2f - totalW/2f); startY = (paperH/2f - totalH/2f) }
+                    when (pos) {
+                        PrintPosition.POS_1 -> { startX = margin.toFloat(); startY = margin.toFloat() + pageTopMargin }
+                        PrintPosition.POS_2 -> { startX = (paperW - totalW - margin).toFloat(); startY = margin.toFloat() + pageTopMargin }
+                        PrintPosition.POS_3 -> { startX = (paperW / 2f - totalW / 2f); startY = (paperH / 2f - totalH / 2f) }
                         PrintPosition.POS_4 -> { startX = margin.toFloat(); startY = (paperH - totalH - margin).toFloat() }
                         PrintPosition.POS_5 -> { startX = (paperW - totalW - margin).toFloat(); startY = (paperH - totalH - margin).toFloat() }
                         else -> {}
                     }
                 } else {
-                    val cellH = paperH / 6f
-                    startY = (cellH * pos.ordinal) + (cellH / 2f - totalH / 2f)
+                    val availableH = paperH - pageTopMargin
+                    val cellH = availableH / 6f
+                    startY = pageTopMargin + (cellH * pos.ordinal) + (cellH / 2f - totalH / 2f)
                 }
             }
 
@@ -127,7 +138,14 @@ object IdStudioLogic {
                 canvas.drawBitmap(sFront, startX, startY, null)
                 canvas.drawBitmap(sBack, startX + idW + gap, startY, null)
             }
-            sFront.recycle(); sBack.recycle()
+
+            // Draw horizontal dashed cut-line on bottom only (with 3mm padding below card)
+            val lineY = startY + totalH + (3 * mmToPx)
+            val lineMargin = (8 * mmToPx)
+            canvas.drawLine(lineMargin, lineY, paperW - lineMargin, lineY, dashPaint)
+
+            sFront.recycle()
+            sBack.recycle()
         }
         page
     }
